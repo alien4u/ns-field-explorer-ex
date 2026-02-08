@@ -179,7 +179,10 @@ const runFieldExplorer = async () => {
     /** Renders all record views if data is available */
     window.fexRenderIfReady = () => {
 
-        if (!oRecord) return;
+        if (!oRecord) {
+            applyViewMode();
+            return;
+        }
 
         renderRecordInfo();
         renderBodyFields();
@@ -546,25 +549,21 @@ const runFieldExplorer = async () => {
 
         if (oResult.result?.error) {
 
-            const oErrDiv = document.createElement('div');
-            oErrDiv.className = 'error-msg';
-            oErrDiv.textContent = `Failed to fetch record: ${oResult.result.error} — Are you on a record page?`;
-            oContainer.innerHTML = '';
-            oContainer.appendChild(oErrDiv);
+            showNonRecordMessage(`Failed to fetch record: ${oResult.result.error}`);
             return;
         }
 
         const sXmlData = oResult.result?.data;
 
         if (!sXmlData) {
-            oContainer.innerHTML = '<div class="error-msg">No data returned.<br><br>Are you on a record page?</div>';
+            showNonRecordMessage('No data returned. Are you on a record page?');
             return;
         }
 
         oRecord = parseXmlRecord(sXmlData);
 
         if (!oRecord) {
-            oContainer.innerHTML = '<div class="error-msg">Could not parse record data.<br><br>Are you on a record page?</div>';
+            showNonRecordMessage('Could not parse record data. Are you on a record page?');
             return;
         }
 
@@ -572,11 +571,7 @@ const runFieldExplorer = async () => {
         window.fexRenderIfReady();
 
     } catch (e) {
-        const oErrDiv = document.createElement('div');
-        oErrDiv.className = 'error-msg';
-        oErrDiv.textContent = `Error: ${e.message} — Are you on a record page?`;
-        oContainer.innerHTML = '';
-        oContainer.appendChild(oErrDiv);
+        showNonRecordMessage(`Error: ${e.message}`);
     }
 
     /* ──── XML Parser ──── */
