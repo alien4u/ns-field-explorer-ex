@@ -1,6 +1,6 @@
 > **⚠️ Disclaimer:** This is a personal project shared under the [MIT License](LICENSE). It is not intended to replace, compete with, or serve as an alternative to any other similar plugin, extension, or tool, commercial or otherwise. Use it as you see fit, at your own risk.
 >
-> This extension is inspired by and built upon the ideas of the original [**NetSuite Field Explorer**](https://github.com/michoelchaikin/netsuite-field-explorer) by [Michoel Chaikin](https://github.com/michoelchaikin). His extension has been an invaluable tool for the NetSuite community — if you haven't already, go give it a ⭐ and consider [supporting his work](https://github.com/michoelchaikin/netsuite-field-explorer). Field Explorer EX is a ground-up rewrite with a different architecture and additional features, but the original inspiration belongs to Michoel.
+> This extension is inspired by and built upon the ideas of the original [**NetSuite Field Explorer**](https://github.com/michoelchaikin/netsuite-field-explorer) by [Michoel Chaikin](https://github.com/michoelchaikin). His extension has been an invaluable tool for the NetSuite community. If you haven't already, go give it a ⭐ and consider [supporting his work](https://github.com/michoelchaikin/netsuite-field-explorer). Field Explorer EX is a ground-up rewrite with a different architecture and additional features, but the original inspiration belongs to Michoel.
 >
 > In response to [Oracle's security notification regarding Chrome extensions](https://community.oracle.com/netsuite/english/discussion/4512418/security-notification-chrome-extensions), this extension has been made fully open source so that anyone can audit the code, verify its behavior, and confirm that it does not collect, transmit, or store any sensitive data. Transparency is the best security policy.
 
@@ -8,7 +8,7 @@
 
 # NetSuite Field Explorer EX
 
-**Explore and inspect every field on any NetSuite record — body fields, sublists, raw data, and navigation management in one tool.**
+**Explore and inspect every field on any NetSuite record: body fields, sublists, raw data, and navigation management in one tool.**
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -16,7 +16,7 @@
 
 ## Overview
 
-NetSuite Field Explorer EX is a browser extension for NetSuite administrators, developers, and consultants. It gives you instant visibility into every field on any record — body fields with types, sublists with all columns, raw JSON, and a built-in navigation manager to declutter NetSuite's menu bar.
+NetSuite Field Explorer EX is a browser extension for NetSuite administrators, developers, and consultants. It gives you instant visibility into every field on any record: body fields with types, sublists with all columns, raw JSON, and a built-in navigation manager to declutter NetSuite's menu bar.
 
 Open any record, click the icon, and get a complete breakdown of the record's data. Or use the Nav Manager on any NetSuite page to hide menu items you don't need.
 
@@ -48,7 +48,7 @@ Open any record, click the icon, and get a complete breakdown of the record's da
 
 ### Nav Manager
 
-- 🗂️ **Menu Visibility Control** · Hide unwanted NetSuite navigation menu items — no more cluttered menu bars from installed bundles and SuiteApps.
+- 🗂️ **Menu Visibility Control** · Hide unwanted NetSuite navigation menu items. No more cluttered menu bars from installed bundles and SuiteApps.
 
 - 🌐 **All Instances** · Hide menu items globally across every NetSuite account you use.
 
@@ -81,7 +81,7 @@ The extension fetches the record's XML representation (`&xml=T`) via NetSuite's 
 1. Click the extension icon on any NetSuite page.
 2. Click the **🗂️ Nav** button in the header.
 3. The menu tree loads all detected navigation items.
-4. Check items to hide them — choose **All Instances** for global rules or the **Account** section for per-account rules.
+4. Check items to hide them. Choose **All Instances** for global rules or the **Account** section for per-account rules.
 5. Click **← Back** to return to the field explorer.
 
 Hidden menus are applied instantly via a content script that injects CSS on every NetSuite page load. Uses the same selector approach as custom Stylus/UserCSS scripts (`data-automation-id` primary, `aria-label` fallback).
