@@ -47,7 +47,7 @@
 
         if (pItem.id) {
             aSelectors.push(
-                `[role="menuitem"]:has(> a[data-automation-id="${pItem.id}"])`
+                `[role="menuitem"]:has(> a[data-automation-id="${CSS.escape(pItem.id)}"])`
             );
         }
 

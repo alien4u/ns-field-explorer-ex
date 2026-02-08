@@ -377,16 +377,21 @@ const runFieldExplorer = async () => {
      * @param {string} pText - text to copy
      * @param {HTMLElement} pElement - element to show confirmation on (optional)
      */
+    /** Active copy timer, prevents overlapping restores */
+    let iCopyTimer = 0;
+
     function copyToClipboard(pText, pElement) {
 
         navigator.clipboard.writeText(pText).then(() => {
 
             if (pElement) {
-                const sOriginal = pElement.textContent;
+                const sOriginalHtml = pElement.innerHTML;
                 pElement.textContent = '✓ Copied';
                 pElement.classList.add('copied');
-                setTimeout(() => {
-                    pElement.textContent = sOriginal;
+
+                clearTimeout(iCopyTimer);
+                iCopyTimer = setTimeout(() => {
+                    pElement.innerHTML = sOriginalHtml;
                     pElement.classList.remove('copied');
                 }, 1000);
             }
@@ -460,7 +465,20 @@ const runFieldExplorer = async () => {
         return;
     }
 
-    const sXmlUrl = oTab.url.includes('xml=T') ? oTab.url : oTab.url + '&xml=T';
+    /* Check if this looks like a record page (has id= parameter) */
+    if (!oTab.url.includes('id=')) {
+
+        const oMsg = document.createElement('div');
+        oMsg.className = 'empty-msg';
+        oMsg.textContent = 'No record detected on this page. Use the 🗂️ Nav button to manage navigation menus.';
+        oContainer.innerHTML = '';
+        oContainer.appendChild(oMsg);
+        return;
+    }
+
+    const sXmlUrl = oTab.url.includes('xml=T')
+        ? oTab.url
+        : oTab.url + (oTab.url.includes('?') ? '&' : '?') + 'xml=T';
 
     try {
 
@@ -601,7 +619,18 @@ const runFieldExplorer = async () => {
 
             Array.from(pNode.children).forEach(pChild => {
 
-                oObj[pChild.nodeName] = parseFieldNode(pChild);
+                const sName = pChild.nodeName;
+                const vParsed = parseFieldNode(pChild);
+
+                if (sName in oObj) {
+                    /* Duplicate child name — convert to array */
+                    if (!Array.isArray(oObj[sName])) {
+                        oObj[sName] = [oObj[sName]];
+                    }
+                    oObj[sName].push(vParsed);
+                } else {
+                    oObj[sName] = vParsed;
+                }
             });
 
             const sText = pNode.textContent?.trim();
