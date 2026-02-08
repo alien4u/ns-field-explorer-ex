@@ -533,23 +533,10 @@ const initNavManager = async () => {
         if (oSearchWrap) oSearchWrap.style.display = '';
         if (oFooter) oFooter.style.display = '';
 
-        /* Restore view — render pending data OR just fix view mode */
+        /* Restore view — fexRenderIfReady handles record pages,
+         * applyViewMode handles non-record pages (via sNonRecordMsg) */
         if (typeof window.fexRenderIfReady === 'function') {
             window.fexRenderIfReady();
-        }
-
-        /* Always restore correct view mode */
-        const oViewModeSelect = document.getElementById('viewModeSelect');
-        const sMode = oViewModeSelect?.value || 'new';
-
-        if (sMode === 'legacy') {
-            if (oTabBar) oTabBar.style.display = 'none';
-            if (oContainer) oContainer.style.display = 'none';
-            if (oLegacyContainer) oLegacyContainer.style.display = 'block';
-        } else {
-            if (oTabBar) oTabBar.style.display = 'flex';
-            if (oContainer) oContainer.style.display = 'block';
-            if (oLegacyContainer) oLegacyContainer.style.display = 'none';
         }
     };
 
