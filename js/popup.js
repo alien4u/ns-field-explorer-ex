@@ -49,6 +49,9 @@ const runFieldExplorer = async () => {
     /* Parsed record data */
     let oRecord = null;
 
+    /* Non-record page message (set when no record detected) */
+    let sNonRecordMsg = '';
+
     /* Sort state */
     let sSortColumn = null;
     let bSortAsc = true;
@@ -222,13 +225,9 @@ const runFieldExplorer = async () => {
         const sMode = oViewModeSelect?.value || 'new';
 
         /* No record loaded — show the non-record message in the target view */
-        if (!oRecord) {
-            const sMsg = document.querySelector('.empty-msg')?.textContent
-                || document.querySelector('.error-msg')?.textContent || '';
-            if (sMsg) {
-                showNonRecordMessage(sMsg);
-                return;
-            }
+        if (!oRecord && sNonRecordMsg) {
+            showNonRecordMessage(sNonRecordMsg);
+            return;
         }
 
         if (sMode === 'legacy') {
@@ -473,21 +472,25 @@ const runFieldExplorer = async () => {
      */
     function showNonRecordMessage(pText) {
 
+        sNonRecordMsg = pText;
         const sMode = oViewModeSelect?.value || 'new';
-        const oMsg = document.createElement('div');
-        oMsg.className = 'empty-msg';
-        oMsg.textContent = pText;
 
         oTabBar.style.display = 'none';
 
         if (sMode === 'legacy') {
             oContainer.style.display = 'none';
             oLegacyTree.innerHTML = '';
+            const oMsg = document.createElement('div');
+            oMsg.className = 'empty-msg';
+            oMsg.textContent = pText;
             oLegacyTree.appendChild(oMsg);
             oLegacyContainer.style.display = 'block';
         } else {
             oLegacyContainer.style.display = 'none';
             oContainer.innerHTML = '';
+            const oMsg = document.createElement('div');
+            oMsg.className = 'empty-msg';
+            oMsg.textContent = pText;
             oContainer.appendChild(oMsg);
             oContainer.style.display = 'block';
         }
