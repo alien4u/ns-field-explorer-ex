@@ -1,4 +1,8 @@
 > **⚠️ Disclaimer:** This is a personal project shared under the [MIT License](LICENSE). It is not intended to replace, compete with, or serve as an alternative to any other similar plugin, extension, or tool, commercial or otherwise. Use it as you see fit, at your own risk.
+>
+> This extension is inspired by and built upon the ideas of the original [**NetSuite Field Explorer**](https://github.com/michoelchaikin/netsuite-field-explorer) by [Michoel Chaikin](https://github.com/michoelchaikin). His extension has been an invaluable tool for the NetSuite community — if you haven't already, go give it a ⭐ and consider [supporting his work](https://github.com/michoelchaikin/netsuite-field-explorer). Field Explorer EX is a ground-up rewrite with a different architecture and additional features, but the original inspiration belongs to Michoel.
+>
+> In response to [Oracle's security notification regarding Chrome extensions](https://community.oracle.com/netsuite/english/discussion/4512418/security-notification-chrome-extensions), this extension has been made fully open source so that anyone can audit the code, verify its behavior, and confirm that it does not collect, transmit, or store any sensitive data. Transparency is the best security policy.
 
 ---
 
