@@ -1,6 +1,9 @@
 .DS_Store
 .idea/
 *.zip
+*.svg
 store/
 dist/
 build.sh
+CHANGELOG.md
+img/icon24.png
