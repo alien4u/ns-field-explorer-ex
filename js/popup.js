@@ -463,20 +463,24 @@ const runFieldExplorer = async () => {
      */
     function showNonRecordMessage(pText) {
 
+        const sMode = oViewModeSelect?.value || 'new';
         const oMsg = document.createElement('div');
         oMsg.className = 'empty-msg';
         oMsg.textContent = pText;
 
-        oContainer.innerHTML = '';
-        oContainer.appendChild(oMsg);
-        oContainer.style.display = 'block';
-
-        oLegacyTree.innerHTML = '';
-        const oLegacyMsg = oMsg.cloneNode(true);
-        oLegacyTree.appendChild(oLegacyMsg);
-        oLegacyContainer.style.display = 'block';
-
         oTabBar.style.display = 'none';
+
+        if (sMode === 'legacy') {
+            oContainer.style.display = 'none';
+            oLegacyTree.innerHTML = '';
+            oLegacyTree.appendChild(oMsg);
+            oLegacyContainer.style.display = 'block';
+        } else {
+            oLegacyContainer.style.display = 'none';
+            oContainer.innerHTML = '';
+            oContainer.appendChild(oMsg);
+            oContainer.style.display = 'block';
+        }
     }
 
     const [oTab] = await chrome.tabs.query({ active: true, currentWindow: true });
