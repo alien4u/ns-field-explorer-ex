@@ -465,8 +465,11 @@ const runFieldExplorer = async () => {
         return;
     }
 
-    /* Check if this looks like a record page (has id= parameter) */
-    if (!oTab.url.includes('id=')) {
+    /* Check if this looks like a record page (has standalone id= parameter) */
+    const oTabUrl = new URL(oTab.url);
+    const bHasRecordId = oTabUrl.searchParams.has('id');
+
+    if (!bHasRecordId) {
 
         const oMsg = document.createElement('div');
         oMsg.className = 'empty-msg';
