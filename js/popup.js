@@ -457,11 +457,33 @@ const runFieldExplorer = async () => {
 
     /* ──── Fetch & Parse Record via &xml=T ──── */
 
+    /**
+     * Shows a message across both new and legacy view containers.
+     * @param {string} pText - message to display
+     */
+    function showNonRecordMessage(pText) {
+
+        const oMsg = document.createElement('div');
+        oMsg.className = 'empty-msg';
+        oMsg.textContent = pText;
+
+        oContainer.innerHTML = '';
+        oContainer.appendChild(oMsg);
+        oContainer.style.display = 'block';
+
+        oLegacyTree.innerHTML = '';
+        const oLegacyMsg = oMsg.cloneNode(true);
+        oLegacyTree.appendChild(oLegacyMsg);
+        oLegacyContainer.style.display = 'block';
+
+        oTabBar.style.display = 'none';
+    }
+
     const [oTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!oTab || !oTab.url || !oTab.url.includes('netsuite.com')) {
 
-        oContainer.innerHTML = '<div class="error-msg">Not on a NetSuite page.</div>';
+        showNonRecordMessage('Not on a NetSuite page.');
         return;
     }
 
@@ -471,11 +493,7 @@ const runFieldExplorer = async () => {
 
     if (!bHasRecordId) {
 
-        const oMsg = document.createElement('div');
-        oMsg.className = 'empty-msg';
-        oMsg.textContent = 'No record detected on this page. Use the 🗂️ Nav button to manage navigation menus.';
-        oContainer.innerHTML = '';
-        oContainer.appendChild(oMsg);
+        showNonRecordMessage('No record detected on this page. Use the 🗂️ Nav button to manage navigation menus.');
         return;
     }
 
