@@ -239,6 +239,12 @@ const runFieldExplorer = async () => {
             oTabBar.style.display = 'flex';
             oContainer.style.display = 'block';
             oLegacyContainer.style.display = 'none';
+            if (oRecord) {
+                updateFieldCount();
+                renderBodyFields();
+                renderActiveSublist();
+                renderRawJson();
+            }
         }
     }
 
