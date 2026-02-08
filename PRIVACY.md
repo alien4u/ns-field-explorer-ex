@@ -1,4 +1,4 @@
-# Privacy Policy — NetSuite Field Explorer EX
+# Privacy Policy - NetSuite Field Explorer EX
 
 **Last updated:** February 8, 2026
 
