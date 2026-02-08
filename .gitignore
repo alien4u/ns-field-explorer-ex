@@ -1,0 +1,6 @@
+.DS_Store
+.idea/
+*.zip
+store/
+dist/
+build.sh

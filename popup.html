@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>NetSuite Field Explorer EX</title>
+    <link rel="stylesheet" href="lib/json-formatter-js/json-formatter-js.css" />
+    <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+
+    <!-- ─── Header ─── -->
+    <header id="header">
+        <div class="header-title">
+            <h1>🔎 Field Explorer EX</h1>
+        </div>
+        <div class="header-controls">
+            <div class="controls-left">
+                <span class="ctrl-group"><span class="ctrl-label">View:</span> <select id="viewModeSelect" class="ctrl-select" title="View Mode"><option value="new">New</option><option value="legacy">Legacy</option></select></span>
+                <span class="ctrl-group"><span class="ctrl-label">Fields:</span> <select id="fieldFilterSelect" class="ctrl-select" title="Field Filter"><option value="all">All</option><option value="custom">Custom</option><option value="standard">Standard</option></select></span>
+            </div>
+            <div class="controls-right">
+                <button id="darkModeToggle" class="icon-btn" title="Toggle Dark Mode">🌙</button>
+                <button id="compactModeToggle" class="icon-btn" title="Toggle Compact Mode">📐</button>
+                <button id="exportJsonBtn" class="btn-export" title="Export as JSON">📥 JSON</button>
+                <button id="exportCsvBtn" class="btn-export" title="Export body fields as CSV">📥 CSV</button>
+                <button id="navManagerBtn" class="btn-nav-manager" title="Manage navigation menu visibility">🗂️ Nav</button>
+            </div>
+        </div>
+        <div class="header-info">
+            <span id="recordInfo"></span>
+            <span id="fieldCount" class="field-count"></span>
+        </div>
+    </header>
+
+    <!-- ─── Search ─── -->
+    <div id="searchWrap">
+        <input type="text" id="searchBox" placeholder="Search fields by name or value..." autocomplete="off" />
+    </div>
+
+    <!-- ─── Tabs (New Mode) ─── -->
+    <nav id="tabBar">
+        <button class="tab-btn active" data-tab="panelBody">Body Fields</button>
+        <button class="tab-btn" data-tab="panelSublists">Sublists</button>
+        <button class="tab-btn" data-tab="panelRaw">Raw JSON</button>
+    </nav>
+
+    <!-- ─── Tab Panels (New Mode) ─── -->
+    <div id="container">
+
+        <!-- Body Fields -->
+        <div id="panelBody" class="tab-panel active">
+            <div class="table-wrap">
+                <table id="bodyFieldsTableOuter">
+                    <thead>
+                        <tr>
+                            <th class="col-id">Field ID</th>
+                            <th class="col-value">Value</th>
+                            <th class="col-type">Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bodyFieldsTable">
+                        <tr><td colspan="3" class="loading-msg">⏳ Loading record data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Sublists -->
+        <div id="panelSublists" class="tab-panel">
+            <div id="sublistContainer">
+                <div class="sublist-picker">
+                    <label for="sublistSelect">Sublist:</label>
+                    <select id="sublistSelect"></select>
+                </div>
+                <div class="table-wrap">
+                    <table id="sublistTableOuter">
+                        <tbody id="sublistTable">
+                            <tr><td class="loading-msg">⏳ Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw JSON -->
+        <div id="panelRaw" class="tab-panel">
+            <div id="rawJsonContainer">
+                <pre class="raw-json">⏳ Loading...</pre>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ─── Legacy Mode Container ─── -->
+    <div id="legacyContainer" style="display:none;">
+        <div id="legacyTree"><div class="loading-msg">⏳ Loading record data...</div></div>
+    </div>
+
+    <!-- ─── Nav Manager Panel (hidden by default) ─── -->
+    <div id="navManagerPanel" style="display:none;">
+        <div class="nav-manager-header">
+            <button id="navManagerBack" class="nav-back-btn" title="Back to Field Explorer">← Back</button>
+            <h2>🗂️ Nav Manager</h2>
+        </div>
+        <div class="nav-manager-search">
+            <input type="text" id="navManagerSearch" placeholder="Search menu items..." autocomplete="off" />
+        </div>
+        <div id="navManagerStatus" class="nav-manager-status">No menu items hidden</div>
+        <div class="nav-manager-body">
+            <div class="nav-section">
+                <div class="nav-section-header" data-target="navTreeAll">
+                    <span class="nav-section-toggle">▼</span>
+                    <span class="nav-section-title">🌐 All Instances</span>
+                </div>
+                <div id="navTreeAll" class="nav-section-content"></div>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-header" data-target="navTreeAccount">
+                    <span class="nav-section-toggle">▼</span>
+                    <span id="navAccountLabel" class="nav-section-title">📋 Account: (detecting...)</span>
+                </div>
+                <div id="navTreeAccount" class="nav-section-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Footer ─── -->
+    <footer>
+        <div class="popup-footer">
+            <div id="resourceLinks">
+                <a id="recordsBrowserLink" href="#" target="_blank" style="display:none;">📖 Records Browser</a>
+                <a id="recordsCatalogLink" href="#" target="_blank" style="display:none;">📚 Records Catalog</a>
+            </div>
+            <div style="max-width: 100%; display: flex; justify-content: center; align-items: center; height: 100%; font-size: 12px;">
+                <span style="margin-right: 6px;"><i>Powered By</i></span>
+                <img src="img/logo.png" alt="Powered Logo" width="22" height="22" style="margin-right: 6px;">
+                <span style="white-space: nowrap;">Alien Technology LLC</span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="lib/json-formatter-js/json-formatter-js.js"></script>
+    <script src="js/popup.js"></script>
+    <script src="js/navmanager.js"></script>
+
+
+</body>
+</html>

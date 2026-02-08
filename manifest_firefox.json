@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "NetSuite Field Explorer EX",
+  "description": "Explore and inspect all fields on any NetSuite record — body fields, sublists, and raw data.",
+  "version": "1.0.0",
+  "permissions": ["activeTab", "storage", "scripting", "tabs"],
+  "host_permissions": ["https://*.netsuite.com/*"],
+  "icons": {
+    "16": "img/icon16.png",
+    "24": "img/icon24.png",
+    "32": "img/icon32.png",
+    "48": "img/icon48.png",
+    "128": "img/icon128.png"
+  },
+  "background": {
+    "scripts": ["js/background.js"],
+    "type": "module",
+    "preferred_environment": "document"
+  },
+  "action": {
+    "default_title": "NetSuite Field Explorer EX",
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F"
+      }
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.netsuite.com/*"],
+      "js": ["js/navhider.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "field-explorer-ex@alientech.com",
+      "strict_min_version": "109.0"
+    }
+  },
+  "data_collection_permissions": {
+    "required": ["none"]
+  }
+}
