@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="gridGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f0fe;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c2d9fc;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a73e8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d47a1;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="lensGrad" x1="30%" y1="30%" x2="80%" y2="80%">
+      <stop offset="0%" style="stop-color:#e3f2fd;stop-opacity:0.5" />
+      <stop offset="100%" style="stop-color:#bbdefb;stop-opacity:0.15" />
+    </linearGradient>
+  </defs>
+
+  <!-- Grid/Table background -->
+  <rect x="8" y="8" width="76" height="76" rx="8" ry="8" fill="url(#gridGrad)" stroke="#1a73e8" stroke-width="2"/>
+
+  <!-- Grid lines - horizontal -->
+  <line x1="8" y1="27" x2="84" y2="27" stroke="#1a73e8" stroke-width="1.5" stroke-opacity="0.4"/>
+  <line x1="8" y1="46" x2="84" y2="46" stroke="#1a73e8" stroke-width="1.5" stroke-opacity="0.4"/>
+  <line x1="8" y1="65" x2="84" y2="65" stroke="#1a73e8" stroke-width="1.5" stroke-opacity="0.4"/>
+
+  <!-- Grid lines - vertical -->
+  <line x1="33" y1="8" x2="33" y2="84" stroke="#1a73e8" stroke-width="1.5" stroke-opacity="0.4"/>
+  <line x1="58" y1="8" x2="58" y2="84" stroke="#1a73e8" stroke-width="1.5" stroke-opacity="0.4"/>
+
+  <!-- Grid header row highlight -->
+  <rect x="9" y="9" width="74" height="17" rx="0" ry="0" fill="#1a73e8" opacity="0.15"/>
+
+  <!-- Small field dots in cells -->
+  <circle cx="20" cy="37" r="3" fill="#1a73e8" opacity="0.5"/>
+  <circle cx="45" cy="37" r="3" fill="#1a73e8" opacity="0.5"/>
+  <circle cx="70" cy="37" r="3" fill="#1a73e8" opacity="0.5"/>
+  <circle cx="20" cy="56" r="3" fill="#1a73e8" opacity="0.35"/>
+  <circle cx="45" cy="56" r="3" fill="#1a73e8" opacity="0.35"/>
+  <circle cx="70" cy="56" r="3" fill="#1a73e8" opacity="0.35"/>
+  <circle cx="20" cy="75" r="3" fill="#1a73e8" opacity="0.25"/>
+  <circle cx="45" cy="75" r="3" fill="#1a73e8" opacity="0.25"/>
+
+  <!-- Magnifying glass handle -->
+  <line x1="97" y1="97" x2="120" y2="120" stroke="url(#glassGrad)" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- Magnifying glass outer ring -->
+  <circle cx="80" cy="80" r="32" fill="none" stroke="url(#glassGrad)" stroke-width="7"/>
+
+  <!-- Magnifying glass lens fill -->
+  <circle cx="80" cy="80" r="28" fill="url(#lensGrad)"/>
+
+  <!-- Lens shine/glint -->
+  <ellipse cx="70" cy="70" rx="10" ry="7" fill="white" opacity="0.3" transform="rotate(-30 70 70)"/>
+</svg>
