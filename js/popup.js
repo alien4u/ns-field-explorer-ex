@@ -483,6 +483,9 @@ const runFieldExplorer = async () => {
 
         oTabBar.style.display = 'none';
 
+        if (oExportJsonBtn) { oExportJsonBtn.disabled = true; oExportJsonBtn.style.opacity = '0.4'; }
+        if (oExportCsvBtn) { oExportCsvBtn.disabled = true; oExportCsvBtn.style.opacity = '0.4'; }
+
         if (sMode === 'legacy') {
             oContainer.style.display = 'none';
             oLegacyTree.innerHTML = '';
