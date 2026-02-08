@@ -15,7 +15,7 @@
   "background": {
     "scripts": ["js/background.js"],
     "type": "module",
-    "preferred_environment": "document"
+    "preferred_environment": ["document"]
   },
   "action": {
     "default_title": "NetSuite Field Explorer EX",
