@@ -221,6 +221,16 @@ const runFieldExplorer = async () => {
 
         const sMode = oViewModeSelect?.value || 'new';
 
+        /* No record loaded — show the non-record message in the target view */
+        if (!oRecord) {
+            const sMsg = document.querySelector('.empty-msg')?.textContent
+                || document.querySelector('.error-msg')?.textContent || '';
+            if (sMsg) {
+                showNonRecordMessage(sMsg);
+                return;
+            }
+        }
+
         if (sMode === 'legacy') {
             oTabBar.style.display = 'none';
             oContainer.style.display = 'none';
