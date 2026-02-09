@@ -18,7 +18,7 @@
 
 | Store | Version | Link |
 |-------|---------|------|
-| Chrome Web Store | *(Under Review)* | - |
+| Chrome Web Store | v1.0.1 | [Install](https://chromewebstore.google.com/detail/netsuite-field-explorer-e/pdmkaejbieljlcemfjpmgifjljhgniij) |
 | Edge Add-ons | *(Under Review)* | - |
 | Firefox Add-ons | *(Under Review)* | - |
 
