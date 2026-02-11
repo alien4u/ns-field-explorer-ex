@@ -3,6 +3,7 @@
  *
  * Handles contextual icon activation (enable/disable per tab).
  * Cross-browser: uses tabs.onUpdated (not declarativeContent).
+ * No "tabs" permission needed — host_permissions grants URL access for matching tabs.
  */
 
 const NETSUITE_URL_PATTERN = /^https:\/\/[^/]*\.netsuite\.com\//;
