@@ -138,8 +138,8 @@ const runFieldExplorer = async () => {
                     }
                 });
                 return oFilteredLine;
-            });
-            if (aFilteredLines.some(pLine => Object.keys(pLine).length > 0)) {
+            }).filter(pLine => Object.keys(pLine).length > 0);
+            if (aFilteredLines.length > 0) {
                 oFiltered[pName] = aFilteredLines;
             }
         });
@@ -604,7 +604,7 @@ const runFieldExplorer = async () => {
                 const sSublistName = pChild.getAttribute('name') || sName;
                 const aLines = [];
 
-                Array.from(pChild.querySelectorAll('line')).forEach(pLine => {
+                Array.from(pChild.children).filter(pEl => pEl.nodeName === 'line').forEach(pLine => {
 
                     const oLineData = {};
 

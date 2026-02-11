@@ -10,7 +10,7 @@
 
 **Explore and inspect every field on any NetSuite record: body fields, sublists, raw data, and navigation management in one tool.**
 
-![Version](https://img.shields.io/badge/version-1.0.1-blue)
+![Version](https://img.shields.io/badge/version-1.0.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Manifest](https://img.shields.io/badge/manifest-v3-orange)
 
@@ -150,7 +150,6 @@ Hidden menus are applied instantly via a content script that injects CSS on ever
 | `activeTab` | Interact with the current page when activated |
 | `storage` | Persist preferences and Nav Manager configuration |
 | `scripting` | Execute scripts in NetSuite tabs for data retrieval and menu extraction |
-| `tabs` | Detect NetSuite pages for contextual icon activation |
 
 ## Browser Compatibility
 
