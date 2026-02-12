@@ -19,7 +19,7 @@
 | Store | Version | Link |
 |-------|---------|------|
 | Chrome Web Store | v1.0.2 | [Install](https://chromewebstore.google.com/detail/netsuite-field-explorer-e/pdmkaejbieljlcemfjpmgifjljhgniij) |
-| Edge Add-ons | v1.0.1 *(v1.0.2 Under Review)* | [Install](https://microsoftedge.microsoft.com/addons/detail/netsuite-record-scripts/lhhnfiedjfpcniachnacpjlppbejbogc) |
+| Edge Add-ons | v1.0.1 *(v1.0.2 Under Review)* | [Install](https://microsoftedge.microsoft.com/addons/detail/fanclcoacijckjhfbcocfmcdfkkbnlci) |
 | Firefox Add-ons | v1.0.2 | [Install](https://addons.mozilla.org/en-US/firefox/addon/netsuite-field-explorer-ex/) |
 
 ## Overview
