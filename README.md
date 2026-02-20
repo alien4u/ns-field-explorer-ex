@@ -1,4 +1,4 @@
-> **⚠️ Disclaimer:** This is a personal project shared under the [MIT License](LICENSE). It is not intended to replace, compete with, or serve as an alternative to any other similar plugin, extension, or tool, commercial or otherwise. Use it as you see fit, at your own risk.
+> **Disclaimer:** This is a personal project shared under the [FSL-1.1-MIT License](LICENSE). It is not intended to replace, compete with, or serve as an alternative to any other similar plugin, extension, or tool, commercial or otherwise. Use it as you see fit, at your own risk.
 >
 > This extension is inspired by and built upon the ideas of the original [**NetSuite Field Explorer**](https://github.com/michoelchaikin/netsuite-field-explorer) by [Michoel Chaikin](https://github.com/michoelchaikin). His extension has been an invaluable tool for the NetSuite community. If you haven't already, go give it a ⭐ and consider [supporting his work](https://github.com/michoelchaikin/netsuite-field-explorer). Field Explorer EX is a ground-up rewrite with a different architecture and additional features, but the original inspiration belongs to Michoel.
 >
@@ -11,7 +11,7 @@
 **Explore and inspect every field on any NetSuite record: body fields, sublists, raw data, and navigation management in one tool.**
 
 ![Version](https://img.shields.io/badge/version-1.0.2-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-FSL--1.1--MIT-green)
 ![Manifest](https://img.shields.io/badge/manifest-v3-orange)
 
 ## Store Availability
@@ -159,7 +159,7 @@ Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
 
 ## License
 
-[MIT](LICENSE)
+[FSL-1.1-MIT](LICENSE) — Free to use for any non-competing purpose. Converts to MIT automatically after two years.
 
 ---
 
