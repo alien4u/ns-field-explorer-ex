@@ -157,6 +157,10 @@ Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
 
 > The default `manifest.json` targets Chrome and Edge. A `manifest_firefox.json` is included for Firefox, which adds the `background.scripts` fallback and `browser_specific_settings` required by Firefox's extension platform.
 
+## Acknowledgments
+
+- Icons and store images created with **Gemini NanoBanana Pro**
+
 ## License
 
 [FSL-1.1-MIT](LICENSE) — Free to use for any non-competing purpose. Converts to MIT automatically after two years.
