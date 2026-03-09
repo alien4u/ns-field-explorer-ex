@@ -9,9 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 const runFieldExplorer = async () => {
 
-    if (typeof browser !== 'undefined' && typeof chrome === 'undefined') {
-        window.chrome = browser;
-    }
+    const browserAPI = (typeof browser !== 'undefined' && browser.runtime) ? browser : chrome;
 
     /* ──── DOM References ──── */
 
@@ -40,11 +38,13 @@ const runFieldExplorer = async () => {
     const oSublistSelect = document.getElementById('sublistSelect');
     const oSublistTable = document.getElementById('sublistTable');
     const oRawJsonContainer = document.getElementById('rawJsonContainer');
+    const oCopyRawJsonBtn = document.getElementById('copyRawJsonBtn');
 
     /* Legacy mode containers */
     const oTabBar = document.getElementById('tabBar');
     const oLegacyContainer = document.getElementById('legacyContainer');
     const oLegacyTree = document.getElementById('legacyTree');
+    const oCopyLegacyJsonBtn = document.getElementById('copyLegacyJsonBtn');
 
     /* Parsed record data */
     let oRecord = null;
@@ -53,7 +53,7 @@ const runFieldExplorer = async () => {
     let sNonRecordMsg = '';
 
     /* Sort state */
-    let sSortColumn = null;
+    let nSortColumn = null;
     let bSortAsc = true;
 
     /* ──── Custom Field Detection ──── */
@@ -150,16 +150,16 @@ const runFieldExplorer = async () => {
 
     const oSettings = await new Promise((resolve) => {
 
-        chrome.storage.local.get(['fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter'], resolve);
+        browserAPI.storage.local.get(['fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter', 'fex_popupWidth', 'fex_popupHeight'], resolve);
     });
 
     if (oSettings.fex_darkMode) {
-        document.body.classList.add('dark-mode');
+        document.body.classList.add('theme-dark');
         if (oDarkToggle) oDarkToggle.classList.add('active');
     }
 
     if (oSettings.fex_compactMode) {
-        document.body.classList.add('compact-mode');
+        document.body.classList.add('fe-compact');
         if (oCompactToggle) oCompactToggle.classList.add('active');
     }
 
@@ -169,6 +169,62 @@ const runFieldExplorer = async () => {
 
     if (oSettings.fex_fieldFilter && oFieldFilterSelect) {
         oFieldFilterSelect.value = oSettings.fex_fieldFilter;
+    }
+
+    /* ──── Restore Popup Size ──── */
+
+    const nMinWidth = 350;
+    const nMaxWidth = 800;
+    const nMinHeight = 300;
+    const nMaxHeight = 600;
+
+    if (oSettings.fex_popupWidth) {
+        document.body.style.width = Math.min(Math.max(oSettings.fex_popupWidth, nMinWidth), nMaxWidth) + 'px';
+    }
+    if (oSettings.fex_popupHeight) {
+        document.body.style.height = Math.min(Math.max(oSettings.fex_popupHeight, nMinHeight), nMaxHeight) + 'px';
+    }
+
+    /* ──── Resize Handle ──── */
+
+    const oResizeHandle = document.getElementById('resizeHandle');
+    if (oResizeHandle) {
+
+        let bDragging = false;
+        let nStartX, nStartY, nStartW, nStartH;
+
+        oResizeHandle.addEventListener('mousedown', (e) => {
+
+            e.preventDefault();
+            bDragging = true;
+            nStartX = e.screenX;
+            nStartY = e.screenY;
+            nStartW = document.body.offsetWidth;
+            nStartH = document.body.offsetHeight;
+            document.body.classList.add('fe-resizing');
+            oResizeHandle.classList.add('dragging');
+        });
+
+        document.addEventListener('mousemove', (e) => {
+
+            if (!bDragging) return;
+            const nNewW = Math.min(Math.max(nStartW - (e.screenX - nStartX), nMinWidth), nMaxWidth);
+            const nNewH = Math.min(Math.max(nStartH + (e.screenY - nStartY), nMinHeight), nMaxHeight);
+            document.body.style.width = nNewW + 'px';
+            document.body.style.height = nNewH + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+
+            if (!bDragging) return;
+            bDragging = false;
+            document.body.classList.remove('fe-resizing');
+            oResizeHandle.classList.remove('dragging');
+            browserAPI.storage.local.set({
+                fex_popupWidth: document.body.offsetWidth,
+                fex_popupHeight: document.body.offsetHeight
+            });
+        });
     }
 
     /* Apply view mode immediately so the correct view is visible while data loads */
@@ -196,10 +252,10 @@ const runFieldExplorer = async () => {
             pTh.title = 'Click to sort';
             pTh.addEventListener('click', () => {
 
-                if (sSortColumn === pIndex) {
+                if (nSortColumn === pIndex) {
                     bSortAsc = !bSortAsc;
                 } else {
-                    sSortColumn = pIndex;
+                    nSortColumn = pIndex;
                     bSortAsc = true;
                 }
 
@@ -223,7 +279,7 @@ const runFieldExplorer = async () => {
 
         /* Don't touch visibility if Nav Manager is open */
         const oNavPanel = document.getElementById('navManagerPanel');
-        if (oNavPanel && oNavPanel.style.display === 'flex') return;
+        if (oNavPanel && oNavPanel.classList.contains('visible')) return;
 
         const sMode = oViewModeSelect?.value || 'new';
 
@@ -253,7 +309,7 @@ const runFieldExplorer = async () => {
 
     oViewModeSelect?.addEventListener('change', () => {
 
-        chrome.storage.local.set({ fex_viewMode: oViewModeSelect.value });
+        browserAPI.storage.local.set({ fex_viewMode: oViewModeSelect.value });
         applyViewMode();
     });
 
@@ -261,7 +317,7 @@ const runFieldExplorer = async () => {
 
     oFieldFilterSelect?.addEventListener('change', () => {
 
-        chrome.storage.local.set({ fex_fieldFilter: oFieldFilterSelect.value });
+        browserAPI.storage.local.set({ fex_fieldFilter: oFieldFilterSelect.value });
         if (!oRecord) return;
         updateFieldCount();
         const sMode = oViewModeSelect?.value || 'new';
@@ -279,25 +335,25 @@ const runFieldExplorer = async () => {
     oDarkToggle?.addEventListener('click', () => {
 
         oDarkToggle.classList.toggle('active');
-        document.body.classList.toggle('dark-mode');
-        chrome.storage.local.set({ fex_darkMode: document.body.classList.contains('dark-mode') });
+        document.body.classList.toggle('theme-dark');
+        browserAPI.storage.local.set({ fex_darkMode: document.body.classList.contains('theme-dark') });
     });
 
     oCompactToggle?.addEventListener('click', () => {
 
         oCompactToggle.classList.toggle('active');
-        document.body.classList.toggle('compact-mode');
-        chrome.storage.local.set({ fex_compactMode: document.body.classList.contains('compact-mode') });
+        document.body.classList.toggle('fe-compact');
+        browserAPI.storage.local.set({ fex_compactMode: document.body.classList.contains('fe-compact') });
     });
 
     /* ──── Tab Switching ──── */
 
-    oTabBtns.forEach(pBtn => {
+    oTabBtns.forEach((pBtn) => {
 
         pBtn.addEventListener('click', () => {
 
-            oTabBtns.forEach(b => b.classList.remove('active'));
-            oTabPanels.forEach(p => p.classList.remove('active'));
+            oTabBtns.forEach((pB) => pB.classList.remove('active'));
+            oTabPanels.forEach((pP) => pP.classList.remove('active'));
 
             pBtn.classList.add('active');
             const sTarget = pBtn.dataset.tab;
@@ -334,20 +390,7 @@ const runFieldExplorer = async () => {
     oExportJsonBtn?.addEventListener('click', () => {
 
         if (!oRecord) return;
-
-        const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
-        const oFilteredSublists = filterSublistsForLegacy(oRecord.oSublists);
-
-        const oExport = {
-            sRecordType: oRecord.sRecordType,
-            sId: oRecord.sId,
-            oBodyFields: oFilteredBody,
-            oSublists: oFilteredSublists,
-            iBodyFieldCount: Object.keys(oFilteredBody).length,
-            iSublistCount: Object.keys(oFilteredSublists).length
-        };
-
-        const sJson = JSON.stringify(oExport, null, 2);
+        const sJson = JSON.stringify(buildExportObject(), null, 2);
         downloadFile(sJson, `${oRecord.sRecordType}_${oRecord.sId}.json`, 'application/json');
     });
 
@@ -365,9 +408,61 @@ const runFieldExplorer = async () => {
             aRows.push([pKey, sVal, sType]);
         });
 
-        const sCsv = aRows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const sCsv = aRows.map((pRow) => pRow.map((pCol) => `"${String(pCol).replace(/"/g, '""')}"`).join(',')).join('\n');
         downloadFile(sCsv, `${oRecord.sRecordType}_${oRecord.sId}_fields.csv`, 'text/csv');
     });
+
+    /* ──── Copy Raw JSON ──── */
+
+    oCopyRawJsonBtn?.addEventListener('click', () => {
+
+        if (!oRecord) return;
+        const sJson = JSON.stringify(buildExportObject(), null, 2);
+        copyButtonToClipboard(sJson, oCopyRawJsonBtn);
+    });
+
+    /* ──── Copy Legacy JSON ──── */
+
+    oCopyLegacyJsonBtn?.addEventListener('click', () => {
+
+        if (!oRecord) return;
+        const sJson = JSON.stringify(buildExportObject(), null, 2);
+        copyButtonToClipboard(sJson, oCopyLegacyJsonBtn);
+    });
+
+    /* ──── Export Object Builder ──── */
+
+    function buildExportObject() {
+
+        const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
+        const oFilteredSublists = filterSublistsForLegacy(oRecord.oSublists);
+
+        return {
+            sRecordType: oRecord.sRecordType,
+            sId: oRecord.sId,
+            oBodyFields: oFilteredBody,
+            oSublists: oFilteredSublists,
+            iBodyFieldCount: Object.keys(oFilteredBody).length,
+            iSublistCount: Object.keys(oFilteredSublists).length
+        };
+    }
+
+    /* ──── Copy Button Helper ──── */
+
+    function copyButtonToClipboard(pText, pBtn) {
+
+        navigator.clipboard.writeText(pText).then(() => {
+
+            const oLabel = pBtn.querySelector('span');
+            oLabel.textContent = 'Copied!';
+            pBtn.classList.add('copied');
+
+            setTimeout(() => {
+                oLabel.textContent = 'Copy';
+                pBtn.classList.remove('copied');
+            }, 1500);
+        }).catch(() => {});
+    }
 
     /* ──── Download Helper ──── */
 
@@ -384,7 +479,9 @@ const runFieldExplorer = async () => {
         const oLink = document.createElement('a');
         oLink.href = sUrl;
         oLink.download = pFilename;
+        document.body.appendChild(oLink);
         oLink.click();
+        oLink.remove();
         URL.revokeObjectURL(sUrl);
     }
 
@@ -396,24 +493,44 @@ const runFieldExplorer = async () => {
      * @param {HTMLElement} pElement - element to show confirmation on (optional)
      */
     /** Active copy timer, prevents overlapping restores */
-    let iCopyTimer = 0;
+    let nCopyTimer = 0;
 
     function copyToClipboard(pText, pElement) {
 
         navigator.clipboard.writeText(pText).then(() => {
 
             if (pElement) {
-                const sOriginalHtml = pElement.innerHTML;
-                pElement.textContent = '✓ Copied';
+                const sOriginalText = pElement.textContent;
+                pElement.textContent = '\u2713 Copied';
                 pElement.classList.add('copied');
 
-                clearTimeout(iCopyTimer);
-                iCopyTimer = setTimeout(() => {
-                    pElement.innerHTML = sOriginalHtml;
+                clearTimeout(nCopyTimer);
+                nCopyTimer = setTimeout(() => {
+                    pElement.textContent = sOriginalText;
                     pElement.classList.remove('copied');
                 }, 1000);
             }
-        });
+        }).catch(() => {});
+    }
+
+    /* ──── Empty Row Helper ──── */
+
+    /**
+     * Creates a single-row table message (e.g. "No results")
+     * @param {number} pColSpan - number of columns to span
+     * @param {string} pMessage - message text
+     * @param {string} [pClass] - CSS class for the td (default: 'empty-msg')
+     * @returns {HTMLTableRowElement}
+     */
+    function createEmptyRow(pColSpan, pMessage, pClass) {
+
+        const oTr = document.createElement('tr');
+        const oTd = document.createElement('td');
+        oTd.colSpan = pColSpan;
+        oTd.className = pClass || 'empty-msg';
+        oTd.textContent = pMessage;
+        oTr.appendChild(oTd);
+        return oTr;
     }
 
     /* ──── Field Type Detection ──── */
@@ -491,7 +608,7 @@ const runFieldExplorer = async () => {
 
         if (sMode === 'legacy') {
             oContainer.style.display = 'none';
-            oLegacyTree.innerHTML = '';
+            oLegacyTree.textContent = '';
             const oMsg = document.createElement('div');
             oMsg.className = 'empty-msg';
             oMsg.textContent = pText;
@@ -499,7 +616,7 @@ const runFieldExplorer = async () => {
             oLegacyContainer.style.display = 'block';
         } else {
             oLegacyContainer.style.display = 'none';
-            oContainer.innerHTML = '';
+            oContainer.textContent = '';
             const oMsg = document.createElement('div');
             oMsg.className = 'empty-msg';
             oMsg.textContent = pText;
@@ -508,7 +625,7 @@ const runFieldExplorer = async () => {
         }
     }
 
-    const [oTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [oTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
 
     if (!oTab || !oTab.url || !oTab.url.includes('netsuite.com')) {
 
@@ -526,13 +643,13 @@ const runFieldExplorer = async () => {
         return;
     }
 
-    const sXmlUrl = oTab.url.includes('xml=T')
-        ? oTab.url
-        : oTab.url + (oTab.url.includes('?') ? '&' : '?') + 'xml=T';
+    const oXmlUrl = new URL(oTab.url);
+    oXmlUrl.searchParams.set('xml', 'T');
+    const sXmlUrl = oXmlUrl.toString();
 
     try {
 
-        const [oResult] = await chrome.scripting.executeScript({
+        const [oResult] = await browserAPI.scripting.executeScript({
             target: { tabId: oTab.id },
             func: async (pUrl) => {
 
@@ -712,7 +829,7 @@ const runFieldExplorer = async () => {
 
         if (!oRecordInfo || !oRecord) return;
 
-        oRecordInfo.innerHTML = '';
+        oRecordInfo.textContent = '';
 
         const aInfoParts = [
             { label: 'Record:', value: oRecord.sRecordType },
@@ -785,17 +902,17 @@ const runFieldExplorer = async () => {
             : aEntries;
 
         /* Sort if a column is selected */
-        if (sSortColumn !== null) {
+        if (nSortColumn !== null) {
             aFiltered.sort((pA, pB) => {
                 let sValA = '';
                 let sValB = '';
-                if (sSortColumn === 0) {
+                if (nSortColumn === 0) {
                     sValA = pA[0].toLowerCase();
                     sValB = pB[0].toLowerCase();
-                } else if (sSortColumn === 1) {
+                } else if (nSortColumn === 1) {
                     sValA = String(pA[1] != null ? pA[1] : '').toLowerCase();
                     sValB = String(pB[1] != null ? pB[1] : '').toLowerCase();
-                } else if (sSortColumn === 2) {
+                } else if (nSortColumn === 2) {
                     sValA = detectFieldType(pA[0], pA[1]).toLowerCase();
                     sValB = detectFieldType(pB[0], pB[1]).toLowerCase();
                 }
@@ -807,7 +924,8 @@ const runFieldExplorer = async () => {
 
         if (aFiltered.length === 0) {
 
-            oBodyFieldsTable.innerHTML = '<tr><td colspan="3" class="empty-msg">No fields match your search.</td></tr>';
+            oBodyFieldsTable.textContent = '';
+            oBodyFieldsTable.appendChild(createEmptyRow(3, 'No fields match your search.'));
             return;
         }
 
@@ -827,7 +945,7 @@ const runFieldExplorer = async () => {
             const oIdSpan = document.createElement('span');
             oIdSpan.className = 'field-id clickable';
             oIdSpan.title = 'Click to copy field ID';
-            oIdSpan.innerHTML = highlightSearch(pKey, sSearch);
+            oIdSpan.appendChild(highlightSearch(pKey, sSearch));
             oIdSpan.addEventListener('click', () => copyToClipboard(pKey, oIdSpan));
             oIdTd.appendChild(oIdSpan);
             oRow.appendChild(oIdTd);
@@ -838,7 +956,7 @@ const runFieldExplorer = async () => {
             const oValSpan = document.createElement('span');
             oValSpan.className = 'field-value clickable';
             oValSpan.title = 'Click to copy value';
-            oValSpan.innerHTML = highlightSearch(sDisplayVal, sSearch);
+            oValSpan.appendChild(highlightSearch(sDisplayVal, sSearch));
             oValSpan.addEventListener('click', () => {
                 const sCopyVal = (typeof pValue === 'object') ? JSON.stringify(pValue) : String(pValue ?? '');
                 copyToClipboard(sCopyVal, oValSpan);
@@ -859,7 +977,7 @@ const runFieldExplorer = async () => {
             oFrag.appendChild(oRow);
         });
 
-        oBodyFieldsTable.innerHTML = '';
+        oBodyFieldsTable.textContent = '';
         oBodyFieldsTable.appendChild(oFrag);
     }
 
@@ -872,7 +990,7 @@ const runFieldExplorer = async () => {
 
         if (!oSublistSelect || !oRecord) return;
 
-        oSublistSelect.innerHTML = '';
+        oSublistSelect.textContent = '';
 
         const aSublistNames = Object.keys(oRecord.oSublists);
 
@@ -904,14 +1022,16 @@ const runFieldExplorer = async () => {
         const sSelected = oSublistSelect?.value;
 
         if (!sSelected || !oRecord.oSublists[sSelected]) {
-            oSublistTable.innerHTML = '<tr><td class="empty-msg">Select a sublist above.</td></tr>';
+            oSublistTable.textContent = '';
+            oSublistTable.appendChild(createEmptyRow(1, 'Select a sublist above.'));
             return;
         }
 
         const aLines = oRecord.oSublists[sSelected];
 
         if (aLines.length === 0) {
-            oSublistTable.innerHTML = '<tr><td class="empty-msg">No lines in this sublist.</td></tr>';
+            oSublistTable.textContent = '';
+            oSublistTable.appendChild(createEmptyRow(1, 'No lines in this sublist.'));
             return;
         }
 
@@ -936,7 +1056,8 @@ const runFieldExplorer = async () => {
             : aCols;
 
         if (aFilteredCols.length === 0) {
-            oSublistTable.innerHTML = '<tr><td class="empty-msg">No fields match your search.</td></tr>';
+            oSublistTable.textContent = '';
+            oSublistTable.appendChild(createEmptyRow(1, 'No fields match your search.'));
             return;
         }
 
@@ -978,7 +1099,7 @@ const runFieldExplorer = async () => {
 
                 oTd.className = 'clickable';
                 oTd.title = 'Click to copy';
-                oTd.innerHTML = highlightSearch(sDisplay, sSearch);
+                oTd.appendChild(highlightSearch(sDisplay, sSearch));
 
                 oTd.addEventListener('click', () => {
 
@@ -992,7 +1113,7 @@ const runFieldExplorer = async () => {
             oFrag.appendChild(oRow);
         });
 
-        oSublistTable.innerHTML = '';
+        oSublistTable.textContent = '';
         oSublistTable.appendChild(oFrag);
     }
 
@@ -1017,12 +1138,16 @@ const runFieldExplorer = async () => {
             iSublistCount: Object.keys(oFilteredSublists).length
         };
 
-        const oPre = document.createElement('pre');
-        oPre.className = 'raw-json';
-        oPre.textContent = JSON.stringify(oExport, null, 2);
+        const sJson = JSON.stringify(oExport, null, 2);
+        let oPre = oRawJsonContainer.querySelector('.raw-json');
 
-        oRawJsonContainer.innerHTML = '';
-        oRawJsonContainer.appendChild(oPre);
+        if (!oPre) {
+            oPre = document.createElement('pre');
+            oPre.className = 'raw-json';
+            oRawJsonContainer.appendChild(oPre);
+        }
+
+        oPre.textContent = sJson;
     }
 
     /* ──── Render: Legacy Mode (JSONFormatter) ──── */
@@ -1055,20 +1180,48 @@ const runFieldExplorer = async () => {
             theme: 'dark'
         });
 
-        oLegacyTree.innerHTML = '';
+        oLegacyTree.textContent = '';
         oLegacyTree.appendChild(oFormatter.render());
 
         if (sSearch) {
             const oRegex = new RegExp('(' + escapeRegex(sSearch) + ')', 'gi');
-            const aElements = oLegacyTree.querySelectorAll(
-                '.json-formatter-key, .json-formatter-string'
+            const oWalker = document.createTreeWalker(
+                oLegacyTree, NodeFilter.SHOW_TEXT
             );
-            aElements.forEach(pElem => {
+            const aNodesToSplit = [];
 
-                pElem.innerHTML = pElem.innerHTML.replace(
-                    oRegex,
-                    '<span class="searchresult">$1</span>'
-                );
+            while (oWalker.nextNode()) {
+
+                if (oRegex.test(oWalker.currentNode.textContent)) {
+                    aNodesToSplit.push(oWalker.currentNode);
+                }
+                oRegex.lastIndex = 0;
+            }
+
+            aNodesToSplit.forEach((pNode) => {
+
+                const oWrapper = document.createElement('span');
+                const sText = pNode.textContent;
+                let nLast = 0;
+                let aFound;
+
+                while ((aFound = oRegex.exec(sText)) !== null) {
+
+                    if (aFound.index > nLast) {
+                        oWrapper.appendChild(document.createTextNode(sText.slice(nLast, aFound.index)));
+                    }
+                    const oHl = document.createElement('span');
+                    oHl.className = 'searchresult';
+                    oHl.textContent = aFound[1];
+                    oWrapper.appendChild(oHl);
+                    nLast = oRegex.lastIndex;
+                }
+
+                if (nLast < sText.length) {
+                    oWrapper.appendChild(document.createTextNode(sText.slice(nLast)));
+                }
+
+                pNode.parentNode.replaceChild(oWrapper, pNode);
             });
         }
     }
@@ -1097,25 +1250,19 @@ const runFieldExplorer = async () => {
         if (typeof pObj !== 'object' || pObj === null) return pObj;
 
         const oResult = Array.isArray(pObj) ? [] : {};
-        let bHasContent = false;
 
         Object.entries(pObj).forEach(([pKey, pValue]) => {
 
             if (typeof pValue !== 'object' || pValue === null) {
-                /* Leaf value — check key and value */
                 const sKeyStr = String(pKey).toUpperCase();
                 const sValStr = String(pValue ?? '').toUpperCase();
                 if (sKeyStr.includes(pSearchUpper) || sValStr.includes(pSearchUpper)) {
                     oResult[pKey] = pValue;
-                    bHasContent = true;
                 }
             } else {
-                /* Nested object — recurse */
                 const oFiltered = deepFilterObject(pValue, pSearchUpper);
-                const iKeys = Object.keys(oFiltered).length;
-                if (iKeys > 0) {
+                if (Object.keys(oFiltered).length > 0) {
                     oResult[pKey] = oFiltered;
-                    bHasContent = true;
                 }
             }
         });
@@ -1135,13 +1282,15 @@ const runFieldExplorer = async () => {
         const RECORDS_BROWSER_URL = 'https://system.netsuite.com/help/helpcenter/en_US/srbrowser/Browser2024_1/script/record';
         const RECORDS_CATALOG_URL = 'https://system.netsuite.com/app/recordscatalog/rcbrowser.nl?whence=#/record_ss';
 
+        const sEncodedType = encodeURIComponent(oRecord.sRecordType);
+
         if (oRecordsBrowserLink) {
-            oRecordsBrowserLink.href = `${RECORDS_BROWSER_URL}/${oRecord.sRecordType}.html`;
+            oRecordsBrowserLink.href = `${RECORDS_BROWSER_URL}/${sEncodedType}.html`;
             oRecordsBrowserLink.style.display = 'inline';
         }
 
         if (oRecordsCatalogLink) {
-            oRecordsCatalogLink.href = `${RECORDS_CATALOG_URL}/${oRecord.sRecordType}`;
+            oRecordsCatalogLink.href = `${RECORDS_CATALOG_URL}/${sEncodedType}`;
             oRecordsCatalogLink.style.display = 'inline';
         }
     }
@@ -1169,31 +1318,42 @@ const runFieldExplorer = async () => {
     }
 
     /**
-     * Wraps search term matches in <mark> tags for highlighting
+     * Creates a DocumentFragment with search term matches wrapped in <mark> elements.
      * @param {string} pText - text to highlight
-     * @param {string} pSearch - search term
-     * @returns {string} HTML with highlighted matches
+     * @param {string} pSearch - lowercase search term
+     * @returns {DocumentFragment} fragment with text nodes and <mark> elements
      */
     function highlightSearch(pText, pSearch) {
 
-        if (!pSearch || !pText) return escapeHtml(pText);
+        const oFrag = document.createDocumentFragment();
+        if (!pText) return oFrag;
 
-        const sEscaped = escapeHtml(pText);
+        if (!pSearch) {
+            oFrag.appendChild(document.createTextNode(pText));
+            return oFrag;
+        }
+
         const oRegex = new RegExp('(' + escapeRegex(pSearch) + ')', 'gi');
+        let nLastIndex = 0;
+        let aMatch;
 
-        return sEscaped.replace(oRegex, '<mark>$1</mark>');
-    }
+        while ((aMatch = oRegex.exec(pText)) !== null) {
 
-    /**
-     * Escapes HTML special characters
-     * @param {string} pStr - string to escape
-     * @returns {string} HTML-safe string
-     */
-    function escapeHtml(pStr) {
+            if (aMatch.index > nLastIndex) {
+                oFrag.appendChild(document.createTextNode(pText.slice(nLastIndex, aMatch.index)));
+            }
 
-        const oDiv = document.createElement('div');
-        oDiv.textContent = pStr;
-        return oDiv.innerHTML;
+            const oMark = document.createElement('mark');
+            oMark.textContent = aMatch[1];
+            oFrag.appendChild(oMark);
+            nLastIndex = oRegex.lastIndex;
+        }
+
+        if (nLastIndex < pText.length) {
+            oFrag.appendChild(document.createTextNode(pText.slice(nLastIndex)));
+        }
+
+        return oFrag;
     }
 
     /**

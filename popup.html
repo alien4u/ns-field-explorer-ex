@@ -8,141 +8,253 @@
 </head>
 <body>
 
-    <!-- ─── Header ─── -->
-    <header id="header">
-        <div class="header-title">
-            <h1>🔎 Field Explorer EX</h1>
-        </div>
-        <div class="header-controls">
-            <div class="controls-left">
-                <span class="ctrl-group"><span class="ctrl-label">View:</span> <select id="viewModeSelect" class="ctrl-select" title="View Mode"><option value="new">New</option><option value="legacy">Legacy</option></select></span>
-                <span class="ctrl-group"><span class="ctrl-label">Fields:</span> <select id="fieldFilterSelect" class="ctrl-select" title="Field Filter"><option value="all">All</option><option value="custom">Custom</option><option value="standard">Standard</option></select></span>
-            </div>
-            <div class="controls-right">
-                <button id="darkModeToggle" class="icon-btn" title="Toggle Dark Mode">🌙</button>
-                <button id="compactModeToggle" class="icon-btn" title="Toggle Compact Mode">📐</button>
-                <button id="exportJsonBtn" class="btn-export" title="Export as JSON">📥 JSON</button>
-                <button id="exportCsvBtn" class="btn-export" title="Export body fields as CSV">📥 CSV</button>
-                <button id="navManagerBtn" class="btn-nav-manager" title="Manage navigation menu visibility">🗂️ Nav</button>
-            </div>
-        </div>
-        <div class="header-info">
-            <span id="recordInfo"></span>
-            <span id="fieldCount" class="field-count"></span>
-        </div>
-    </header>
+<!-- SVG Icon Sprite (hidden) -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none;">
+    <symbol id="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+    </symbol>
+    <symbol id="ico-compress" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 14 10 14 10 20"/>
+        <polyline points="20 10 14 10 14 4"/>
+        <line x1="14" y1="10" x2="21" y2="3"/>
+        <line x1="3" y1="21" x2="10" y2="14"/>
+    </symbol>
+    <symbol id="ico-download" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+    </symbol>
+    <symbol id="ico-table" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0
+                 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+    </symbol>
+    <symbol id="ico-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0
+                 0 1 2 2z"/>
+    </symbol>
+    <symbol id="ico-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+    </symbol>
+    <symbol id="ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </symbol>
+    <symbol id="ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </symbol>
+    <symbol id="ico-external" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0
+                 0 1 2-2h6"/>
+        <polyline points="15 3 21 3 21 9"/>
+        <line x1="10" y1="14" x2="21" y2="3"/>
+    </symbol>
 
-    <!-- ─── Search ─── -->
-    <div id="searchWrap">
-        <input type="text" id="searchBox" placeholder="Search fields by name or value..." autocomplete="off" />
+</svg>
+
+<!-- Toolbar -->
+<header id="header" class="fe-toolbar">
+    <div class="fe-toolbar-row">
+        <span class="fe-toolbar-title">Field Explorer EX</span>
+        <div class="fe-toolbar-actions">
+            <button id="darkModeToggle" class="fe-icon-btn" title="Toggle Dark Mode">
+                <svg class="fe-icon"><use href="#ico-moon"/></svg>
+            </button>
+            <button id="compactModeToggle" class="fe-icon-btn" title="Toggle Compact Mode">
+                <svg class="fe-icon"><use href="#ico-compress"/></svg>
+            </button>
+            <button id="exportJsonBtn" class="fe-icon-btn" title="Export as JSON">
+                <svg class="fe-icon"><use href="#ico-download"/></svg>
+            </button>
+            <button id="exportCsvBtn" class="fe-icon-btn" title="Export as CSV">
+                <svg class="fe-icon"><use href="#ico-table"/></svg>
+            </button>
+            <button id="navManagerBtn" class="fe-icon-btn" title="Nav Manager">
+                <svg class="fe-icon"><use href="#ico-folder"/></svg>
+            </button>
+        </div>
+    </div>
+</header>
+
+<!-- Filter Bar -->
+<div id="filterBar" class="fe-filter-bar">
+    <div class="fe-filter-row">
+        <span class="fe-filter-group">
+            <span class="fe-filter-label">View:</span>
+            <select id="viewModeSelect" class="fe-select" title="View Mode">
+                <option value="new">New</option>
+                <option value="legacy">Legacy</option>
+            </select>
+        </span>
+        <span class="fe-filter-group">
+            <span class="fe-filter-label">Fields:</span>
+            <select id="fieldFilterSelect" class="fe-select" title="Field Filter">
+                <option value="all">All</option>
+                <option value="custom">Custom</option>
+                <option value="standard">Standard</option>
+            </select>
+        </span>
+        <span id="recordInfo" class="fe-record-info"></span>
+    </div>
+    <div class="fe-info-row">
+        <span id="fieldCount" class="fe-field-count"></span>
+    </div>
+</div>
+
+<!-- Search -->
+<div id="searchWrap" class="fe-search-wrap">
+    <input type="text" id="searchBox" placeholder="Search fields by name or value..." autocomplete="off" />
+</div>
+
+<!-- Tabs (New Mode) -->
+<nav id="tabBar">
+    <button class="tab-btn active" data-tab="panelBody">Body Fields</button>
+    <button class="tab-btn" data-tab="panelSublists">Sublists</button>
+    <button class="tab-btn" data-tab="panelRaw">Raw JSON</button>
+</nav>
+
+<!-- Tab Panels (New Mode) -->
+<div id="container">
+
+    <!-- Body Fields -->
+    <div id="panelBody" class="tab-panel active">
+        <div class="table-wrap">
+            <table id="bodyFieldsTableOuter">
+                <thead>
+                    <tr>
+                        <th class="col-id">Field ID</th>
+                        <th class="col-value">Value</th>
+                        <th class="col-type">Type</th>
+                    </tr>
+                </thead>
+                <tbody id="bodyFieldsTable">
+                    <tr><td colspan="3" class="loading-msg">Loading record data...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <!-- ─── Tabs (New Mode) ─── -->
-    <nav id="tabBar">
-        <button class="tab-btn active" data-tab="panelBody">Body Fields</button>
-        <button class="tab-btn" data-tab="panelSublists">Sublists</button>
-        <button class="tab-btn" data-tab="panelRaw">Raw JSON</button>
-    </nav>
-
-    <!-- ─── Tab Panels (New Mode) ─── -->
-    <div id="container">
-
-        <!-- Body Fields -->
-        <div id="panelBody" class="tab-panel active">
+    <!-- Sublists -->
+    <div id="panelSublists" class="tab-panel">
+        <div id="sublistContainer">
+            <div class="sublist-picker">
+                <label for="sublistSelect">Sublist:</label>
+                <select id="sublistSelect"></select>
+            </div>
             <div class="table-wrap">
-                <table id="bodyFieldsTableOuter">
-                    <thead>
-                        <tr>
-                            <th class="col-id">Field ID</th>
-                            <th class="col-value">Value</th>
-                            <th class="col-type">Type</th>
-                        </tr>
-                    </thead>
-                    <tbody id="bodyFieldsTable">
-                        <tr><td colspan="3" class="loading-msg">⏳ Loading record data...</td></tr>
+                <table id="sublistTableOuter">
+                    <tbody id="sublistTable">
+                        <tr><td class="loading-msg">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
-
-        <!-- Sublists -->
-        <div id="panelSublists" class="tab-panel">
-            <div id="sublistContainer">
-                <div class="sublist-picker">
-                    <label for="sublistSelect">Sublist:</label>
-                    <select id="sublistSelect"></select>
-                </div>
-                <div class="table-wrap">
-                    <table id="sublistTableOuter">
-                        <tbody id="sublistTable">
-                            <tr><td class="loading-msg">⏳ Loading...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Raw JSON -->
-        <div id="panelRaw" class="tab-panel">
-            <div id="rawJsonContainer">
-                <pre class="raw-json">⏳ Loading...</pre>
-            </div>
-        </div>
-
     </div>
 
-    <!-- ─── Legacy Mode Container ─── -->
-    <div id="legacyContainer" style="display:none;">
-        <div id="legacyTree"><div class="loading-msg">⏳ Loading record data...</div></div>
-    </div>
-
-    <!-- ─── Nav Manager Panel (hidden by default) ─── -->
-    <div id="navManagerPanel" style="display:none;">
-        <div class="nav-manager-header">
-            <button id="navManagerBack" class="nav-back-btn" title="Back to Field Explorer">← Back</button>
-            <h2>🗂️ Nav Manager</h2>
-        </div>
-        <div class="nav-manager-search">
-            <input type="text" id="navManagerSearch" placeholder="Search menu items..." autocomplete="off" />
-        </div>
-        <div id="navManagerStatus" class="nav-manager-status">No menu items hidden</div>
-        <div class="nav-manager-body">
-            <div class="nav-section">
-                <div class="nav-section-header" data-target="navTreeAll">
-                    <span class="nav-section-toggle">▼</span>
-                    <span class="nav-section-title">🌐 All Instances</span>
-                </div>
-                <div id="navTreeAll" class="nav-section-content"></div>
-            </div>
-            <div class="nav-section">
-                <div class="nav-section-header" data-target="navTreeAccount">
-                    <span class="nav-section-toggle">▼</span>
-                    <span id="navAccountLabel" class="nav-section-title">📋 Account: (detecting...)</span>
-                </div>
-                <div id="navTreeAccount" class="nav-section-content"></div>
-            </div>
+    <!-- Raw JSON -->
+    <div id="panelRaw" class="tab-panel">
+        <div id="rawJsonContainer">
+            <button id="copyRawJsonBtn" class="fe-copy-float fe-copy-float-raw" title="Copy JSON to clipboard">
+                <svg class="fe-icon" style="width:12px;height:12px;"><use href="#ico-copy"/></svg>
+                <span>Copy</span>
+            </button>
+            <pre class="raw-json">Loading...</pre>
         </div>
     </div>
 
-    <!-- ─── Footer ─── -->
-    <footer>
-        <div class="popup-footer">
-            <div id="resourceLinks">
-                <a id="recordsBrowserLink" href="#" target="_blank" style="display:none;">📖 Records Browser</a>
-                <a id="recordsCatalogLink" href="#" target="_blank" style="display:none;">📚 Records Catalog</a>
+</div>
+
+<!-- Legacy Mode Container -->
+<div id="legacyContainer" style="display:none;">
+    <button id="copyLegacyJsonBtn" class="fe-copy-float" title="Copy raw JSON to clipboard">
+        <svg class="fe-icon" style="width:12px;height:12px;"><use href="#ico-copy"/></svg>
+        <span>Copy</span>
+    </button>
+    <div id="legacyTree"><div class="loading-msg">Loading record data...</div></div>
+</div>
+
+<!-- Nav Manager Panel (hidden by default) -->
+<div id="navManagerPanel">
+    <div class="nav-manager-header">
+        <button id="navManagerBack" class="nav-back-btn" title="Back to Field Explorer">
+            <svg class="fe-icon" style="width:14px;height:14px;"><use href="#ico-arrow-left"/></svg>
+            Back
+        </button>
+        <h2>Nav Manager</h2>
+    </div>
+    <div class="nav-manager-search">
+        <input type="text" id="navManagerSearch" placeholder="Search menu items..." autocomplete="off" />
+    </div>
+    <div id="navManagerStatus" class="nav-manager-status">No menu items hidden</div>
+    <div class="nav-manager-body">
+        <div class="nav-section">
+            <div class="nav-section-header" data-target="navTreeAll">
+                <span class="nav-section-toggle">&#9660;</span>
+                <span class="nav-section-title">All Instances</span>
             </div>
-            <div style="max-width: 100%; display: flex; justify-content: center; align-items: center; height: 100%; font-size: 12px;">
-                <span style="margin-right: 6px;"><i>Powered By</i></span>
-                <img src="img/logo.png" alt="Powered Logo" width="22" height="22" style="margin-right: 6px;">
-                <span style="white-space: nowrap;">Alien Technology LLC</span>
-            </div>
+            <div id="navTreeAll" class="nav-section-content"></div>
         </div>
-    </footer>
+        <div class="nav-section">
+            <div class="nav-section-header" data-target="navTreeAccount">
+                <span class="nav-section-toggle">&#9660;</span>
+                <span id="navAccountLabel" class="nav-section-title">Account: (detecting...)</span>
+            </div>
+            <div id="navTreeAccount" class="nav-section-content"></div>
+        </div>
+    </div>
+</div>
 
-    <script src="lib/json-formatter-js/json-formatter-js.js"></script>
-    <script src="js/popup.js"></script>
-    <script src="js/navmanager.js"></script>
+<!-- Footer -->
+<footer class="fe-footer">
+    <div id="resourceLinks" class="fe-footer-row fe-footer-links">
+        <a id="recordsBrowserLink" href="#" target="_blank" style="display:none;">
+            <svg class="fe-icon" style="width:12px;height:12px;vertical-align:-1px;margin-right:3px;"><use href="#ico-external"/></svg>Records Browser
+        </a>
+        <a id="recordsCatalogLink" href="#" target="_blank" style="display:none;">
+            <svg class="fe-icon" style="width:12px;height:12px;vertical-align:-1px;margin-right:3px;"><use href="#ico-external"/></svg>Records Catalog
+        </a>
+    </div>
+    <div class="fe-footer-row">
+        <span class="fe-footer-text">Field Explorer EX v1.1.0</span>
+        <span class="fe-footer-sep"></span>
+        <span class="fe-footer-brand">
+            <img src="img/alien-tech.svg" alt="" class="fe-footer-logo">
+            <span>by Alien Technology LLC</span>
+        </span>
+    </div>
+    <div class="fe-footer-row fe-footer-sponsor">
+        <span>Sponsored by</span>
+        <a href="https://suitemigration.com/netsuite-extension-alien/?utm_source=alien_technology&utm_medium=banner&utm_campaign=alien_extensions&utm_content=ns-field-explorer-ex" target="_blank" rel="noopener noreferrer">
+            <img src="img/spon-logo.png" alt="SuiteMigration" class="fe-sponsor-img">
+        </a>
+    </div>
+    <div class="fe-footer-row fe-sponsor-text">
+        Migrate your finance data to NetSuite without the Migraine using&nbsp;<a href="https://suitemigration.com/netsuite-extension-alien/?utm_source=alien_technology&utm_medium=banner&utm_campaign=alien_extensions&utm_content=ns-field-explorer-ex" target="_blank" rel="noopener noreferrer">suitemigration.com</a>.
+    </div>
+</footer>
 
+<div id="resizeHandle" class="fe-resize-handle" title="Drag to resize">
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="21" y1="3" x2="3" y2="21"/>
+        <line x1="21" y1="11" x2="11" y2="21"/>
+        <line x1="21" y1="19" x2="19" y2="21"/>
+    </svg>
+</div>
+
+<script src="lib/json-formatter-js/json-formatter-js.js"></script>
+<script src="js/popup.js"></script>
+<script src="js/navmanager.js"></script>
 
 </body>
 </html>

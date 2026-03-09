@@ -10,7 +10,7 @@
 
 **Explore and inspect every field on any NetSuite record: body fields, sublists, raw data, and navigation management in one tool.**
 
-![Version](https://img.shields.io/badge/version-1.0.2-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![License](https://img.shields.io/badge/license-FSL--1.1--MIT-green)
 ![Manifest](https://img.shields.io/badge/manifest-v3-orange)
 
@@ -21,6 +21,8 @@
 | Chrome Web Store | v1.0.2 | [Install](https://chromewebstore.google.com/detail/netsuite-field-explorer-e/pdmkaejbieljlcemfjpmgifjljhgniij) |
 | Edge Add-ons | v1.0.2 | [Install](https://microsoftedge.microsoft.com/addons/detail/fanclcoacijckjhfbcocfmcdfkkbnlci) |
 | Firefox Add-ons | v1.0.2 | [Install](https://addons.mozilla.org/en-US/firefox/addon/netsuite-field-explorer-ex/) |
+
+> v1.1.0 has been submitted to all stores and is pending review.
 
 ## Overview
 
@@ -53,6 +55,8 @@ Open any record, click the icon, and get a complete breakdown of the record's da
 - 🌙 **Dark / Light Mode**
 
 - 📐 **Compact Mode** · Condensed layout for smaller screens.
+
+- ↔️ **Resizable Popup** · Drag the corner grip to resize the popup width and height. Your preferred size is remembered across sessions.
 
 ### Nav Manager
 
@@ -159,12 +163,33 @@ Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
 
 ## Acknowledgments
 
-- Icons and store images created with **Gemini NanoBanana Pro**
+- Icons and store images co-authored with **Gemini NanoBanana Pro**
+- Code co-authored with **Claude Code**
+- Sponsored by **[SuiteMigration](https://suitemigration.com/netsuite-extension-alien/?utm_source=alien_technology&utm_medium=banner&utm_campaign=alien_extensions&utm_content=ns-field-explorer-ex)**
+
+## Changelog
+
+### v1.1.0 -- 2026-03-05
+
+- Complete UI overhaul -- CSS custom properties design token system (`--fe-*` prefix), dark navy toolbar, consistent shadows and transitions
+- SVG sprite icon system replacing inline emoji throughout the UI
+- Floating copy-to-clipboard buttons on Raw JSON panel (both New and Legacy views) with "Copied!" feedback
+- Redesigned two-row filter bar with record info and field count separation
+- Footer with sponsor branding (SuiteMigration)
+- Eliminated all `innerHTML` usage across every JS file for Firefox AMO compliance
+- DocumentFragment-based search highlighting (XSS-safe)
+- TreeWalker-based legacy view search highlighting (pure DOM, no HTML string manipulation)
+- Resizable popup -- drag the bottom-left corner grip to adjust width and height, persisted via chrome.storage.local
+- Cross-browser compatibility verified (Chrome, Edge, Firefox MV3 -- 0 blockers)
+
+### v1.0.2
+
+- Initial public release
 
 ## License
 
-[FSL-1.1-MIT](LICENSE) — Free to use for any non-competing purpose. Converts to MIT automatically after two years.
+[FSL-1.1-MIT](LICENSE) -- Free to use for any non-competing purpose. Converts to MIT automatically after two years.
 
 ---
 
-*Powered by Alien Technology LLC*
+*By [Alien Technology LLC](https://www.alientechnologyllc.com/)*

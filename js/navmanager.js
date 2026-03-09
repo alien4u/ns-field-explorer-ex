@@ -27,6 +27,7 @@ const initNavManager = async () => {
 
     /* Main content areas to hide/show when Nav Manager is active */
     const oHeader = document.getElementById('header');
+    const oFilterBar = document.getElementById('filterBar');
     const oSearchWrap = document.getElementById('searchWrap');
     const oTabBar = document.getElementById('tabBar');
     const oContainer = document.getElementById('container');
@@ -55,7 +56,7 @@ const initNavManager = async () => {
 
         try {
 
-            const [oTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const [oTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
 
             if (!oTab?.url) return '';
 
@@ -78,11 +79,11 @@ const initNavManager = async () => {
 
         try {
 
-            const [oTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const [oTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
 
             if (!oTab?.id) return [];
 
-            const [oResult] = await chrome.scripting.executeScript({
+            const [oResult] = await browserAPI.scripting.executeScript({
                 target: { tabId: oTab.id },
                 func: () => {
 
@@ -236,7 +237,7 @@ const initNavManager = async () => {
      */
     const renderTree = (pContainer, pItems, pHiddenMap, pScope, pSearchTerm, pGlobalMap) => {
 
-        pContainer.innerHTML = '';
+        pContainer.textContent = '';
 
         if (!pItems || pItems.length === 0) {
 
@@ -478,6 +479,7 @@ const initNavManager = async () => {
 
         /* Hide main content */
         if (oHeader) oHeader.style.display = 'none';
+        if (oFilterBar) oFilterBar.style.display = 'none';
         if (oSearchWrap) oSearchWrap.style.display = 'none';
         if (oTabBar) oTabBar.style.display = 'none';
         if (oContainer) oContainer.style.display = 'none';
@@ -485,7 +487,7 @@ const initNavManager = async () => {
         if (oFooter) oFooter.style.display = 'none';
 
         /* Show nav panel */
-        oNavPanel.style.display = 'flex';
+        oNavPanel.classList.add('visible');
 
         /* Load data */
         sAccountId = await getAccountIdFromTab();
@@ -500,7 +502,7 @@ const initNavManager = async () => {
 
         /* Extract menu tree */
         const fnLoadingMsg = (pContainer) => {
-            pContainer.innerHTML = '';
+            pContainer.textContent = '';
             const oDiv = document.createElement('div');
             oDiv.className = 'nav-loading';
             oDiv.textContent = '⏳ Scanning navigation menu...';
@@ -526,10 +528,11 @@ const initNavManager = async () => {
      */
     const hidePanel = () => {
 
-        oNavPanel.style.display = 'none';
+        oNavPanel.classList.remove('visible');
 
-        /* Always restore header, search, footer */
+        /* Always restore header, search, filter bar, footer */
         if (oHeader) oHeader.style.display = '';
+        if (oFilterBar) oFilterBar.style.display = '';
         if (oSearchWrap) oSearchWrap.style.display = '';
         if (oFooter) oFooter.style.display = '';
 

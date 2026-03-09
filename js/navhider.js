@@ -84,7 +84,7 @@
                 ? { key: pItem, id: pItem, label: '' }
                 : pItem;
 
-            buildSelectors(oItem).forEach((s) => aAllSelectors.push(s));
+            buildSelectors(oItem).forEach((pSel) => aAllSelectors.push(pSel));
         });
 
         if (aAllSelectors.length === 0) {
