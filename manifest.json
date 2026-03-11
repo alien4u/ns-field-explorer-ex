@@ -2,18 +2,14 @@
   "manifest_version": 3,
   "name": "NetSuite Field Explorer EX",
   "description": "Explore and inspect all fields on any NetSuite record — body fields, sublists, and raw data.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "permissions": ["activeTab", "storage", "scripting"],
-  "host_permissions": ["https://*.netsuite.com/*"],
   "icons": {
     "16": "img/icon16.png",
     "24": "img/icon24.png",
     "32": "img/icon32.png",
     "48": "img/icon48.png",
     "128": "img/icon128.png"
-  },
-  "background": {
-    "service_worker": "js/background.js"
   },
   "action": {
     "default_title": "NetSuite Field Explorer EX",

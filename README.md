@@ -10,7 +10,7 @@
 
 **Explore and inspect every field on any NetSuite record: body fields, sublists, raw data, and navigation management in one tool.**
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.1-blue)
 ![License](https://img.shields.io/badge/license-FSL--1.1--MIT-green)
 ![Manifest](https://img.shields.io/badge/manifest-v3-orange)
 
@@ -81,7 +81,7 @@ Open any record, click the icon, and get a complete breakdown of the record's da
 ### Field Explorer
 
 1. Navigate to any record page in NetSuite.
-2. Click the extension icon (it lights up on NetSuite pages).
+2. Click the extension icon.
 3. Browse body fields, sublists, and raw JSON across tabs.
 4. Use search, filters, and sorting to find what you need.
 5. Click any value to copy it to your clipboard.
@@ -144,13 +144,12 @@ Hidden menus are applied instantly via a content script that injects CSS on ever
 3. Enable **Developer Mode**
 4. Click **Load unpacked** and select the project folder
 
-> **Firefox users:** Before loading, rename `manifest_firefox.json` to `manifest.json` (replacing the original). The Firefox manifest includes the required `background.scripts` fallback and `browser_specific_settings` for Firefox compatibility.
+> **Firefox users:** Before loading, rename `manifest_firefox.json` to `manifest.json` (replacing the original). The Firefox manifest includes the required `browser_specific_settings` for Firefox compatibility.
 
 ### Permissions
 
 | Permission | Purpose |
 |------------|---------|
-| `host_permissions: *.netsuite.com` | Fetch record XML data and inject scripts on NetSuite pages |
 | `activeTab` | Interact with the current page when activated |
 | `storage` | Persist preferences and Nav Manager configuration |
 | `scripting` | Execute scripts in NetSuite tabs for data retrieval and menu extraction |
@@ -159,7 +158,7 @@ Hidden menus are applied instantly via a content script that injects CSS on ever
 
 Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
 
-> The default `manifest.json` targets Chrome and Edge. A `manifest_firefox.json` is included for Firefox, which adds the `background.scripts` fallback and `browser_specific_settings` required by Firefox's extension platform.
+> The default `manifest.json` targets Chrome and Edge. A `manifest_firefox.json` is included for Firefox, which adds `browser_specific_settings` required by Firefox's extension platform.
 
 ## Acknowledgments
 

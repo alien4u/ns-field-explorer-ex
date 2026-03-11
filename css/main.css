@@ -25,7 +25,6 @@
     --fe-copied-text: #155724;
     --fe-mark-bg: #fff176;
     --fe-mark-text: #333;
-    --fe-spinner-dot: #24385B;
     --fe-toolbar-bg: #24385B;
     --fe-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --fe-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -57,7 +56,6 @@ body.theme-dark {
     --fe-copied-text: #a5d6a7;
     --fe-mark-bg: #e65100;
     --fe-mark-text: #fff;
-    --fe-spinner-dot: #64b5f6;
     --fe-toolbar-bg: #1e2022;
     --fe-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
     --fe-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.4);
@@ -603,48 +601,6 @@ mark {
 
 .error-msg {
     color: var(--fe-error);
-}
-
-/* ===============================================
- * Spinner - Pulsing Three-Dot
- * =============================================== */
-.fe-spinner {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-    padding: 40px 0 20px 0;
-}
-
-.fe-spinner.hidden {
-    display: none;
-}
-
-.fe-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--fe-spinner-dot);
-    animation: fe-pulse 1.2s ease-in-out infinite;
-}
-
-.fe-dot:nth-child(2) {
-    animation-delay: 0.15s;
-}
-
-.fe-dot:nth-child(3) {
-    animation-delay: 0.3s;
-}
-
-@keyframes fe-pulse {
-    0%, 80%, 100% {
-        opacity: 0.25;
-        transform: scale(0.8);
-    }
-    40% {
-        opacity: 1;
-        transform: scale(1);
-    }
 }
 
 /* ===============================================

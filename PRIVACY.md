@@ -35,11 +35,9 @@ This extension does **not**:
 
 | Permission | Purpose |
 |------------|---------|
-| `host_permissions: *.netsuite.com` | Fetch record XML data and inject scripts on NetSuite pages |
 | `activeTab` | Interact with the current page when activated |
 | `storage` | Persist user preferences and Nav Manager configuration |
 | `scripting` | Execute scripts in NetSuite tabs for data retrieval and menu extraction |
-| `tabs` | Detect NetSuite pages for contextual icon activation |
 
 All permissions are used exclusively for the extension's core functionality as described above.
 

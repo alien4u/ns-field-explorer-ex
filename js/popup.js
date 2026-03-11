@@ -17,8 +17,8 @@ const runFieldExplorer = async () => {
     const oContainer = document.getElementById('container');
     const oRecordInfo = document.getElementById('recordInfo');
     const oFieldCount = document.getElementById('fieldCount');
-    const oTabBtns = document.querySelectorAll('.tab-btn');
-    const oTabPanels = document.querySelectorAll('.tab-panel');
+    const aTabBtns = document.querySelectorAll('.tab-btn');
+    const aTabPanels = document.querySelectorAll('.tab-panel');
 
     /* Controls */
     const oDarkToggle = document.getElementById('darkModeToggle');
@@ -275,6 +275,7 @@ const runFieldExplorer = async () => {
         applyViewMode();
     };
 
+    /** Applies the current view mode (new vs legacy) and updates container visibility. */
     function applyViewMode() {
 
         /* Don't touch visibility if Nav Manager is open */
@@ -348,12 +349,12 @@ const runFieldExplorer = async () => {
 
     /* ──── Tab Switching ──── */
 
-    oTabBtns.forEach((pBtn) => {
+    aTabBtns.forEach((pBtn) => {
 
         pBtn.addEventListener('click', () => {
 
-            oTabBtns.forEach((pB) => pB.classList.remove('active'));
-            oTabPanels.forEach((pP) => pP.classList.remove('active'));
+            aTabBtns.forEach((pB) => pB.classList.remove('active'));
+            aTabPanels.forEach((pP) => pP.classList.remove('active'));
 
             pBtn.classList.add('active');
             const sTarget = pBtn.dataset.tab;
@@ -943,7 +944,7 @@ const runFieldExplorer = async () => {
             const oIdTd = document.createElement('td');
             oIdTd.className = 'col-id';
             const oIdSpan = document.createElement('span');
-            oIdSpan.className = 'field-id clickable';
+            oIdSpan.className = 'clickable';
             oIdSpan.title = 'Click to copy field ID';
             oIdSpan.appendChild(highlightSearch(pKey, sSearch));
             oIdSpan.addEventListener('click', () => copyToClipboard(pKey, oIdSpan));
@@ -954,7 +955,7 @@ const runFieldExplorer = async () => {
             const oValTd = document.createElement('td');
             oValTd.className = 'col-value';
             const oValSpan = document.createElement('span');
-            oValSpan.className = 'field-value clickable';
+            oValSpan.className = 'clickable';
             oValSpan.title = 'Click to copy value';
             oValSpan.appendChild(highlightSearch(sDisplayVal, sSearch));
             oValSpan.addEventListener('click', () => {
@@ -1172,11 +1173,11 @@ const runFieldExplorer = async () => {
         };
 
         /* Apply search filter if searching */
-        const [oDisplayData, iExpandLevels] = sSearch
+        const [oDisplayData, nExpandLevels] = sSearch
             ? [filterLegacyRecord(oLegacyData, sSearch), Infinity]
             : [oLegacyData, 2];
 
-        const oFormatter = new JSONFormatter(oDisplayData, iExpandLevels, {
+        const oFormatter = new JSONFormatter(oDisplayData, nExpandLevels, {
             theme: 'dark'
         });
 
@@ -1279,7 +1280,7 @@ const runFieldExplorer = async () => {
 
         if (!oRecord) return;
 
-        const RECORDS_BROWSER_URL = 'https://system.netsuite.com/help/helpcenter/en_US/srbrowser/Browser2024_1/script/record';
+        const RECORDS_BROWSER_URL = 'https://system.netsuite.com/help/helpcenter/en_US/srbrowser/Browser2025_2/script/record';
         const RECORDS_CATALOG_URL = 'https://system.netsuite.com/app/recordscatalog/rcbrowser.nl?whence=#/record_ss';
 
         const sEncodedType = encodeURIComponent(oRecord.sRecordType);
