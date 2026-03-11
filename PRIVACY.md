@@ -38,6 +38,7 @@ This extension does **not**:
 | `activeTab` | Interact with the current page when activated |
 | `storage` | Persist user preferences and Nav Manager configuration |
 | `scripting` | Execute scripts in NetSuite tabs for data retrieval and menu extraction |
+| `optional_host_permissions: *.netsuite.com` | Requested on first Nav Manager use to auto-hide menus on page load |
 
 All permissions are used exclusively for the extension's core functionality as described above.
 

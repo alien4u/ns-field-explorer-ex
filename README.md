@@ -153,12 +153,13 @@ Hidden menus are applied instantly via a content script that injects CSS on ever
 | `activeTab` | Interact with the current page when activated |
 | `storage` | Persist preferences and Nav Manager configuration |
 | `scripting` | Execute scripts in NetSuite tabs for data retrieval and menu extraction |
+| `optional_host_permissions: *.netsuite.com` | Requested on first Nav Manager use to auto-hide menus on page load |
 
 ## Browser Compatibility
 
 Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
 
-> The default `manifest.json` targets Chrome and Edge. A `manifest_firefox.json` is included for Firefox, which adds `browser_specific_settings` required by Firefox's extension platform.
+> The default `manifest.json` targets Chrome and Edge. A `manifest_firefox.json` is included for Firefox, which adds the `background.scripts` fallback and `browser_specific_settings` required by Firefox's extension platform.
 
 ## Acknowledgments
 
@@ -168,7 +169,19 @@ Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
 
 ## Changelog
 
-### v1.1.0 -- 2026-03-05
+### v1.1.1 - 2026-03-10
+
+- Removed smart icon (gray out) - extension icon is always clickable; non-NetSuite pages show a friendly message
+- Dropped `host_permissions` and `content_scripts` from manifests - eliminates install-time browser warnings
+- Nav Manager now uses `optional_host_permissions` with a one-time permission prompt on first use
+- Permission gate interstitial with open source transparency note before browser permission request
+- Dynamic content script registration via `scripting.registerContentScripts` (persists across restarts)
+- Minimal background service worker for content script re-registration on extension update
+- Removed dead spinner CSS and unused variables
+- Updated Records Browser URL to 2025.2
+- Hungarian notation cleanup across all JS files
+
+### v1.1.0 - 2026-03-05
 
 - Complete UI overhaul -- CSS custom properties design token system (`--fe-*` prefix), dark navy toolbar, consistent shadows and transitions
 - SVG sprite icon system replacing inline emoji throughout the UI

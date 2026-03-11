@@ -116,7 +116,7 @@
             aKeys.push(`navHide_${sAccountId}`);
         }
 
-        browserAPI.storage.local.get(aKeys, (oResult) => {
+        browserAPI.storage.local.get(aKeys).then((oResult) => {
 
             const aAllItems = oResult['navHide_all'] || [];
             const aAccountItems = sAccountId ? (oResult[`navHide_${sAccountId}`] || []) : [];
@@ -148,7 +148,7 @@
         if (pArea !== 'local') return;
 
         const bRelevant = Object.keys(pChanges).some(
-            (sKey) => sKey.startsWith('navHide_')
+            (pKey) => pKey.startsWith('navHide_')
         );
 
         if (bRelevant) {

@@ -36,6 +36,32 @@ const initNavManager = async () => {
 
     if (!oNavBtn || !oNavPanel) return;
 
+    const NETSUITE_ORIGIN = 'https://*.netsuite.com/*';
+    const oPermissionGate = document.getElementById('navPermissionGate');
+    const oNavContent = document.getElementById('navManagerContent');
+    const oGrantBtn = document.getElementById('navGrantAccessBtn');
+
+    /**
+     * Registers the navhider content script dynamically if not already registered.
+     */
+    const ensureNavhiderRegistered = async () => {
+
+        try {
+
+            const aScripts = await browserAPI.scripting.getRegisteredContentScripts({ ids: ['fex-navhider'] });
+
+            if (aScripts.length > 0) return;
+
+            await browserAPI.scripting.registerContentScripts([{
+                id: 'fex-navhider',
+                matches: [NETSUITE_ORIGIN],
+                js: ['js/navhider.js'],
+                runAt: 'document_start'
+            }]);
+
+        } catch (_e) { /* ignore */ }
+    };
+
     /* ──── State ──── */
 
     let sAccountId = '';
@@ -65,7 +91,7 @@ const initNavManager = async () => {
 
             return aMatch ? aMatch[1] : '';
 
-        } catch (e) {
+        } catch (_pE) {
             return '';
         }
     };
@@ -154,7 +180,7 @@ const initNavManager = async () => {
 
             return oResult?.result || [];
 
-        } catch (e) {
+        } catch (_pE) {
             return [];
         }
     };
@@ -172,9 +198,7 @@ const initNavManager = async () => {
             aKeys.push(`navHide_${sAccountId}`);
         }
 
-        const oResult = await new Promise((resolve) => {
-            browserAPI.storage.local.get(aKeys, resolve);
-        });
+        const oResult = await browserAPI.storage.local.get(aKeys);
 
         oHiddenAll = arrayToMap(oResult['navHide_all'] || []);
         oHiddenAccount = sAccountId
@@ -458,12 +482,12 @@ const initNavManager = async () => {
 
         if (!oNavStatus) return;
 
-        const iAll = oHiddenAll.size;
-        const iAccount = oHiddenAccount.size;
+        const nAll = oHiddenAll.size;
+        const nAccount = oHiddenAccount.size;
         const aParts = [];
 
-        if (iAll > 0) aParts.push(`${iAll} global`);
-        if (iAccount > 0) aParts.push(`${iAccount} account`);
+        if (nAll > 0) aParts.push(`${nAll} global`);
+        if (nAccount > 0) aParts.push(`${nAccount} account`);
 
         oNavStatus.textContent = aParts.length > 0
             ? `Hiding ${aParts.join(' + ')} menu items`
@@ -473,11 +497,10 @@ const initNavManager = async () => {
     /* ──── Panel Toggle ──── */
 
     /**
-     * Shows the Nav Manager panel, hiding the main content.
+     * Hides main content and shows the nav panel shell.
      */
-    const showPanel = async () => {
+    const showPanelShell = () => {
 
-        /* Hide main content */
         if (oHeader) oHeader.style.display = 'none';
         if (oFilterBar) oFilterBar.style.display = 'none';
         if (oSearchWrap) oSearchWrap.style.display = 'none';
@@ -486,8 +509,27 @@ const initNavManager = async () => {
         if (oLegacyContainer) oLegacyContainer.style.display = 'none';
         if (oFooter) oFooter.style.display = 'none';
 
-        /* Show nav panel */
         oNavPanel.classList.add('visible');
+    };
+
+    /**
+     * Shows the permission gate interstitial, hiding the nav content.
+     */
+    const showPermissionGate = () => {
+
+        showPanelShell();
+        oPermissionGate.classList.add('visible');
+        oNavContent.classList.add('hidden');
+    };
+
+    /**
+     * Shows the Nav Manager panel with full content (permission already granted).
+     */
+    const showPanel = async () => {
+
+        showPanelShell();
+        oPermissionGate.classList.remove('visible');
+        oNavContent.classList.remove('hidden');
 
         /* Load data */
         sAccountId = await getAccountIdFromTab();
@@ -545,7 +587,32 @@ const initNavManager = async () => {
 
     /* ──── Event Listeners ──── */
 
-    oNavBtn.addEventListener('click', showPanel);
+    oNavBtn.addEventListener('click', async () => {
+
+        const bHasPermission = await browserAPI.permissions.contains({
+            origins: [NETSUITE_ORIGIN]
+        });
+
+        if (bHasPermission) {
+            await ensureNavhiderRegistered();
+            await showPanel();
+        } else {
+            showPermissionGate();
+        }
+    });
+
+    oGrantBtn.addEventListener('click', async () => {
+
+        const bGranted = await browserAPI.permissions.request({
+            origins: [NETSUITE_ORIGIN]
+        });
+
+        if (!bGranted) return;
+
+        await ensureNavhiderRegistered();
+        await showPanel();
+    });
+
     oNavBack.addEventListener('click', hidePanel);
 
     /* Section collapse/expand toggles */

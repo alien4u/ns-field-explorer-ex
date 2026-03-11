@@ -59,6 +59,15 @@
         <polyline points="15 3 21 3 21 9"/>
         <line x1="10" y1="14" x2="21" y2="3"/>
     </symbol>
+    <symbol id="ico-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </symbol>
+    <symbol id="ico-code" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 18 22 12 16 6"/>
+        <polyline points="8 6 2 12 8 18"/>
+    </symbol>
 
 </svg>
 
@@ -192,6 +201,35 @@
         </button>
         <h2>Nav Manager</h2>
     </div>
+    <div id="navPermissionGate" class="nav-permission-gate">
+        <div class="nav-perm-header">
+            <div class="nav-perm-icon-box">
+                <svg class="fe-icon" style="width:16px;height:16px;"><use href="#ico-shield"/></svg>
+            </div>
+            <div>
+                <div class="nav-perm-title">Site Access Required</div>
+                <div class="nav-perm-subtitle">One-time permission for Nav Manager</div>
+            </div>
+        </div>
+        <div class="nav-perm-body">
+            <p class="nav-perm-msg">Nav Manager lets you hide unwanted NetSuite menu items. To apply these rules <strong>automatically on every page load</strong>, it needs access to <span class="nav-perm-code">*.netsuite.com</span> pages.</p>
+            <div class="nav-perm-fact">
+                <strong>What this enables:</strong> A small content script injects CSS to hide your selected menu items before the page renders. No data leaves your browser.
+            </div>
+            <div class="nav-perm-note">
+                <div class="nav-perm-note-header">
+                    <svg class="fe-icon" style="width:12px;height:12px;"><use href="#ico-code"/></svg>
+                    <strong>Open Source</strong>
+                </div>
+                This extension is fully open source. Audit every line of code at <a href="https://github.com/alien4u/ns-field-explorer-ex" target="_blank" rel="noopener noreferrer">github.com/alien4u/ns-field-explorer-ex</a>.
+            </div>
+        </div>
+        <div class="nav-perm-actions">
+            <span class="nav-perm-hint">Your browser will confirm this request</span>
+            <button id="navGrantAccessBtn" class="nav-grant-btn">Grant Access</button>
+        </div>
+    </div>
+    <div id="navManagerContent">
     <div class="nav-manager-search">
         <input type="text" id="navManagerSearch" placeholder="Search menu items..." autocomplete="off" />
     </div>
@@ -211,6 +249,7 @@
             </div>
             <div id="navTreeAccount" class="nav-section-content"></div>
         </div>
+    </div>
     </div>
 </div>
 

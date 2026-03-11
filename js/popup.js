@@ -34,7 +34,6 @@ const runFieldExplorer = async () => {
 
     /* Tab content containers */
     const oBodyFieldsTable = document.getElementById('bodyFieldsTable');
-    const oSublistContainer = document.getElementById('sublistContainer');
     const oSublistSelect = document.getElementById('sublistSelect');
     const oSublistTable = document.getElementById('sublistTable');
     const oRawJsonContainer = document.getElementById('rawJsonContainer');
@@ -104,9 +103,9 @@ const runFieldExplorer = async () => {
         const sFilter = oFieldFilterSelect?.value || 'all';
         if (sFilter === 'all') return pCols;
 
-        return pCols.filter(sCol => {
+        return pCols.filter(pCol => {
 
-            const bIsCustom = isCustomField(sCol);
+            const bIsCustom = isCustomField(pCol);
             return sFilter === 'custom' ? bIsCustom : !bIsCustom;
         });
     }
@@ -148,10 +147,7 @@ const runFieldExplorer = async () => {
 
     /* ──── Restore Settings ──── */
 
-    const oSettings = await new Promise((resolve) => {
-
-        browserAPI.storage.local.get(['fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter', 'fex_popupWidth', 'fex_popupHeight'], resolve);
-    });
+    const oSettings = await browserAPI.storage.local.get(['fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter', 'fex_popupWidth', 'fex_popupHeight']);
 
     if (oSettings.fex_darkMode) {
         document.body.classList.add('theme-dark');
@@ -193,23 +189,23 @@ const runFieldExplorer = async () => {
         let bDragging = false;
         let nStartX, nStartY, nStartW, nStartH;
 
-        oResizeHandle.addEventListener('mousedown', (e) => {
+        oResizeHandle.addEventListener('mousedown', (pEvent) => {
 
-            e.preventDefault();
+            pEvent.preventDefault();
             bDragging = true;
-            nStartX = e.screenX;
-            nStartY = e.screenY;
+            nStartX = pEvent.screenX;
+            nStartY = pEvent.screenY;
             nStartW = document.body.offsetWidth;
             nStartH = document.body.offsetHeight;
             document.body.classList.add('fe-resizing');
             oResizeHandle.classList.add('dragging');
         });
 
-        document.addEventListener('mousemove', (e) => {
+        document.addEventListener('mousemove', (pEvent) => {
 
             if (!bDragging) return;
-            const nNewW = Math.min(Math.max(nStartW - (e.screenX - nStartX), nMinWidth), nMaxWidth);
-            const nNewH = Math.min(Math.max(nStartH + (e.screenY - nStartY), nMinHeight), nMaxHeight);
+            const nNewW = Math.min(Math.max(nStartW - (pEvent.screenX - nStartX), nMinWidth), nMaxWidth);
+            const nNewH = Math.min(Math.max(nStartH + (pEvent.screenY - nStartY), nMinHeight), nMaxHeight);
             document.body.style.width = nNewW + 'px';
             document.body.style.height = nNewH + 'px';
         });
@@ -443,8 +439,8 @@ const runFieldExplorer = async () => {
             sId: oRecord.sId,
             oBodyFields: oFilteredBody,
             oSublists: oFilteredSublists,
-            iBodyFieldCount: Object.keys(oFilteredBody).length,
-            iSublistCount: Object.keys(oFilteredSublists).length
+            nBodyFieldCount: Object.keys(oFilteredBody).length,
+            nSublistCount: Object.keys(oFilteredSublists).length
         };
     }
 
@@ -658,8 +654,8 @@ const runFieldExplorer = async () => {
                     const oResp = await fetch(pUrl, { credentials: 'include' });
                     if (!oResp.ok) return { error: `HTTP ${oResp.status}` };
                     return { data: await oResp.text() };
-                } catch (e) {
-                    return { error: e.message };
+                } catch (pErr) {
+                    return { error: pErr.message };
                 }
             },
             args: [sXmlUrl]
@@ -688,8 +684,8 @@ const runFieldExplorer = async () => {
         /* Render all views (or defer if Nav Manager is open) */
         window.fexRenderIfReady();
 
-    } catch (e) {
-        showNonRecordMessage(`Error: ${e.message}`);
+    } catch (pErr) {
+        showNonRecordMessage(`Error: ${pErr.message}`);
     }
 
     /* ──── XML Parser ──── */
@@ -761,8 +757,8 @@ const runFieldExplorer = async () => {
             sId: sId,
             oBodyFields: oBodyFields,
             oSublists: oSublists,
-            iBodyFieldCount: Object.keys(oBodyFields).length,
-            iSublistCount: Object.keys(oSublists).length
+            nBodyFieldCount: Object.keys(oBodyFields).length,
+            nSublistCount: Object.keys(oSublists).length
         };
     }
 
@@ -869,15 +865,15 @@ const runFieldExplorer = async () => {
 
         const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
         const oFilteredSublists = filterSublistsForLegacy(oRecord.oSublists);
-        const iBodyCount = Object.keys(oFilteredBody).length;
-        const iSublistCount = Object.keys(oFilteredSublists).length;
+        const nBodyCount = Object.keys(oFilteredBody).length;
+        const nSublistCount = Object.keys(oFilteredSublists).length;
         const sFilter = oFieldFilterSelect?.value || 'all';
 
         if (sFilter === 'all') {
-            oFieldCount.textContent = `${iBodyCount} fields · ${iSublistCount} sublists`;
+            oFieldCount.textContent = `${nBodyCount} fields · ${nSublistCount} sublists`;
         } else {
             const sLabel = sFilter === 'custom' ? 'custom' : 'standard';
-            oFieldCount.textContent = `${iBodyCount} ${sLabel} fields · ${iSublistCount} sublists`;
+            oFieldCount.textContent = `${nBodyCount} ${sLabel} fields · ${nSublistCount} sublists`;
         }
     }
 
@@ -1007,8 +1003,8 @@ const runFieldExplorer = async () => {
 
             const oOpt = document.createElement('option');
             oOpt.value = pName;
-            const iLineCount = oRecord.oSublists[pName].length;
-            oOpt.textContent = `${pName} (${iLineCount} lines)`;
+            const nLineCount = oRecord.oSublists[pName].length;
+            oOpt.textContent = `${pName} (${nLineCount} lines)`;
             oSublistSelect.appendChild(oOpt);
         });
     }
@@ -1135,8 +1131,8 @@ const runFieldExplorer = async () => {
             sId: oRecord.sId,
             oBodyFields: oFilteredBody,
             oSublists: oFilteredSublists,
-            iBodyFieldCount: Object.keys(oFilteredBody).length,
-            iSublistCount: Object.keys(oFilteredSublists).length
+            nBodyFieldCount: Object.keys(oFilteredBody).length,
+            nSublistCount: Object.keys(oFilteredSublists).length
         };
 
         const sJson = JSON.stringify(oExport, null, 2);

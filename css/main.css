@@ -813,6 +813,171 @@ body.fe-compact #legacyContainer .json-formatter-undefined {
     display: flex;
 }
 
+/* -- Nav Permission Gate -- */
+.nav-permission-gate {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.nav-permission-gate.visible {
+    display: flex;
+}
+
+.nav-perm-header {
+    background: var(--fe-bg-section);
+    border-bottom: 1px solid var(--fe-primary);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-perm-icon-box {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--fe-radius-sm);
+    background: var(--fe-toolbar-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.nav-perm-icon-box .fe-icon {
+    color: #fff;
+}
+
+.nav-perm-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--fe-primary);
+    letter-spacing: 0.02em;
+}
+
+.nav-perm-subtitle {
+    font-size: 11px;
+    color: var(--fe-text-muted);
+    margin-top: 2px;
+}
+
+.nav-perm-body {
+    padding: 14px 16px 12px;
+}
+
+.nav-perm-msg {
+    margin: 0 0 10px;
+    color: var(--fe-text);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.nav-perm-code {
+    background: var(--fe-bg-section);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--fe-primary);
+    font-size: 12px;
+    border: 1px solid var(--fe-border);
+    font-family: var(--fe-mono);
+}
+
+.nav-perm-fact {
+    background: var(--fe-bg-card-alt);
+    border: 1px solid var(--fe-primary);
+    border-radius: var(--fe-radius-sm);
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--fe-text);
+    line-height: 1.55;
+}
+
+.nav-perm-fact strong {
+    color: var(--fe-primary);
+}
+
+.nav-perm-note {
+    background: var(--fe-bg-card);
+    border: 1px solid var(--fe-border);
+    border-radius: var(--fe-radius-sm);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--fe-text-muted);
+    line-height: 1.55;
+}
+
+.nav-perm-note-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 4px;
+}
+
+.nav-perm-note-header strong {
+    color: var(--fe-primary);
+    font-size: 12px;
+}
+
+.nav-perm-note-header .fe-icon {
+    color: var(--fe-primary);
+}
+
+.nav-perm-note a {
+    color: var(--fe-text-link);
+    text-decoration: none;
+}
+
+.nav-perm-note a:hover {
+    color: var(--fe-text-link-hover);
+    text-decoration: underline;
+}
+
+.nav-perm-actions {
+    border-top: 1px solid var(--fe-border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.nav-perm-hint {
+    font-size: 11px;
+    color: var(--fe-text-muted);
+}
+
+.nav-grant-btn {
+    padding: 7px 16px;
+    border-radius: var(--fe-radius-sm);
+    border: none;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--fe-toolbar-bg);
+    color: #fff;
+    transition: opacity var(--fe-transition);
+    flex-shrink: 0;
+}
+
+.nav-grant-btn:hover {
+    opacity: 0.85;
+}
+
+/* -- Nav Manager Content (hidden when permission gate is shown) -- */
+#navManagerContent {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
+#navManagerContent.hidden {
+    display: none;
+}
+
 .nav-manager-header {
     display: flex;
     align-items: center;
