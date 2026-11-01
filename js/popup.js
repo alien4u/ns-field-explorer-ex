@@ -1,6 +1,51 @@
+/**
+ * Bridge between popup.js and navmanager.js. Created before any await so the
+ * Nav Manager never races the async init of the explorer.
+ */
+window.fex = {
+    navOpen: false,
+    renderIfReady: () => {}
+};
+
+/**
+ * Paints a startup failure into the record container and hides the two views
+ * that would otherwise leave the popup blank.
+ *
+ * @param {string} pMessage - message to display
+ */
+const showStartupError = (pMessage) => {
+
+    const oContainer = document.getElementById('container');
+    const oTabBar = document.getElementById('tabBar');
+    const oLegacyContainer = document.getElementById('legacyContainer');
+
+    if (oTabBar) oTabBar.style.display = 'none';
+    if (oLegacyContainer) oLegacyContainer.style.display = 'none';
+
+    if (!oContainer) return;
+
+    oContainer.textContent = '';
+
+    const oMsg = document.createElement('div');
+
+    oMsg.className = 'error-msg';
+    oMsg.textContent = pMessage;
+    oContainer.appendChild(oMsg);
+    oContainer.style.display = '';
+};
+
 document.addEventListener('DOMContentLoaded', () => {
 
-    runFieldExplorer();
+    runFieldExplorer().catch((pErr) => {
+
+        const sMessage = 'Field Explorer failed to start: ' + (pErr?.message || String(pErr));
+
+        /* The bridge is still the stub when init fails this early, and closing the
+         * Nav Manager delegates the record views to it - give it something to paint */
+        window.fex.renderIfReady = () => showStartupError(sMessage);
+
+        showStartupError(sMessage);
+    });
 });
 
 /**
@@ -8,8 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
  * Fetches record data via XML API and renders UI
  */
 const runFieldExplorer = async () => {
-
-    const browserAPI = (typeof browser !== 'undefined' && browser.runtime) ? browser : chrome;
 
     /* ──── DOM References ──── */
 
@@ -25,6 +68,7 @@ const runFieldExplorer = async () => {
     const oCompactToggle = document.getElementById('compactModeToggle');
     const oExportJsonBtn = document.getElementById('exportJsonBtn');
     const oExportCsvBtn = document.getElementById('exportCsvBtn');
+    const oExportSublistCsvBtn = document.getElementById('exportSublistCsvBtn');
     const oViewModeSelect = document.getElementById('viewModeSelect');
     const oFieldFilterSelect = document.getElementById('fieldFilterSelect');
 
@@ -50,10 +94,20 @@ const runFieldExplorer = async () => {
 
     /* Non-record page message (set when no record detected) */
     let sNonRecordMsg = '';
+    let sNonRecordClass = 'empty-msg';
 
     /* Sort state */
     let nSortColumn = null;
     let bSortAsc = true;
+
+    /* Panels holding stale output because a render was skipped while they were hidden */
+    const oDirty = { body: false, sublists: false, raw: false };
+
+    /* Rows currently painted in the sublist table, resolved by the delegated copy handler */
+    let aRenderedCols = [];
+    let aRenderedLines = [];
+
+    const nSublistRenderCap = 500;
 
     /* ──── Custom Field Detection ──── */
 
@@ -68,7 +122,41 @@ const runFieldExplorer = async () => {
         return /^(custbody|custcol|custitem|custevent|custentity|custrecord)/.test(sId);
     }
 
-    /* ──── Field Filter Helper ──── */
+    /* ──── Filter Helpers ──── */
+
+    /**
+     * Tests a field ID against the active field filter.
+     * @param {string} pFieldId - field ID to check
+     * @returns {boolean} true when the field survives the filter
+     */
+    function matchesFieldFilter(pFieldId) {
+
+        const sFilter = oFieldFilterSelect?.value || 'all';
+
+        if (sFilter === 'all') return true;
+
+        return sFilter === 'custom' ? isCustomField(pFieldId) : !isCustomField(pFieldId);
+    }
+
+    /**
+     * @returns {string} active view mode ('new' or 'legacy')
+     */
+    function getViewMode() {
+
+        return oViewModeSelect?.value || 'new';
+    }
+
+    /**
+     * Renders a field value as the string used for copy, search and CSV.
+     * @param {*} pValue - field value
+     * @returns {string} flat string representation
+     */
+    function stringifyFieldValue(pValue) {
+
+        if (pValue === null || pValue === undefined) return '';
+
+        return (typeof pValue === 'object') ? JSON.stringify(pValue) : String(pValue);
+    }
 
     /**
      * Filters an object of fields based on current field filter setting.
@@ -77,19 +165,15 @@ const runFieldExplorer = async () => {
      */
     function filterFieldsByType(pFields) {
 
-        const sFilter = oFieldFilterSelect?.value || 'all';
-        if (sFilter === 'all') return pFields;
+        if ((oFieldFilterSelect?.value || 'all') === 'all') return pFields;
 
         const oFiltered = {};
-        Object.entries(pFields).forEach(([sKey, vVal]) => {
 
-            const bIsCustom = isCustomField(sKey);
-            if (sFilter === 'custom' && bIsCustom) {
-                oFiltered[sKey] = vVal;
-            } else if (sFilter === 'standard' && !bIsCustom) {
-                oFiltered[sKey] = vVal;
-            }
+        Object.entries(pFields).forEach(([pKey, pVal]) => {
+
+            if (matchesFieldFilter(pKey)) oFiltered[pKey] = pVal;
         });
+
         return oFiltered;
     }
 
@@ -100,14 +184,7 @@ const runFieldExplorer = async () => {
      */
     function filterSublistCols(pCols) {
 
-        const sFilter = oFieldFilterSelect?.value || 'all';
-        if (sFilter === 'all') return pCols;
-
-        return pCols.filter(pCol => {
-
-            const bIsCustom = isCustomField(pCol);
-            return sFilter === 'custom' ? bIsCustom : !bIsCustom;
-        });
+        return pCols.filter((pCol) => matchesFieldFilter(pCol));
     }
 
     /**
@@ -118,46 +195,343 @@ const runFieldExplorer = async () => {
      */
     function filterSublistsForLegacy(pSublists) {
 
-        const sFilter = oFieldFilterSelect?.value || 'all';
-        if (sFilter === 'all') return pSublists;
+        if ((oFieldFilterSelect?.value || 'all') === 'all') return pSublists;
 
         const oFiltered = {};
+
         Object.entries(pSublists).forEach(([pName, pLines]) => {
 
-            const aFilteredLines = pLines.map(pLine => {
+            const aFilteredLines = pLines.map((pLine) => {
 
                 const oFilteredLine = {};
+
                 Object.entries(pLine).forEach(([pCol, pVal]) => {
 
-                    const bIsCustom = isCustomField(pCol);
-                    if (sFilter === 'custom' && bIsCustom) {
-                        oFilteredLine[pCol] = pVal;
-                    } else if (sFilter === 'standard' && !bIsCustom) {
-                        oFilteredLine[pCol] = pVal;
-                    }
+                    if (matchesFieldFilter(pCol)) oFilteredLine[pCol] = pVal;
                 });
+
                 return oFilteredLine;
-            }).filter(pLine => Object.keys(pLine).length > 0);
+
+            }).filter((pLine) => Object.keys(pLine).length > 0);
+
             if (aFilteredLines.length > 0) {
                 oFiltered[pName] = aFilteredLines;
             }
         });
+
         return oFiltered;
+    }
+
+    /* ──── Storage Helpers ──── */
+
+    /* Roaming preferences live in storage.sync with storage.local as the always-fresh fallback */
+    const FEX_ROAMING_KEYS = ['fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter'];
+
+    /* Popup size is device-local by design - screens differ per machine */
+    const FEX_SIZE_KEYS = ['fex_popupWidth', 'fex_popupHeight'];
+
+    /* Values boot.js reads synchronously before the first paint */
+    const FEX_MIRROR_KEYS = ['fex_popupWidth', 'fex_popupHeight', 'fex_darkMode', 'fex_compactMode'];
+
+    /* Roaming values sync has not accepted yet. Hydrated from storage.local during
+     * Restore Settings; without it the next open would merge the stale sync copy back
+     * over a choice the user already made. */
+    const oSyncPending = {};
+
+    /* Issue order of the sync writes made this session, and the newest issued per key.
+     * Writes for one key can settle out of order, so only the newest may decide that
+     * key's pending state - see settleSyncWrite. Hydrated entries carry no sequence,
+     * which makes them older than anything issued this session. */
+    const oSyncWriteSeq = {};
+
+    let nSyncWriteSeq = 0;
+
+    /**
+     * Swallows a rejected settings write. Quota and I/O failures are non-fatal -
+     * the popup keeps working on the values it already read.
+     * @param {Promise} pWrite - storage write promise
+     */
+    function guardWrite(pWrite) {
+
+        pWrite.catch((pErr) => console.warn('[FEX] settings write', pErr));
+    }
+
+    /**
+     * Writes the pending set to storage.local, dropping the key once it empties.
+     */
+    function persistSyncPending() {
+
+        guardWrite(Object.keys(oSyncPending).length > 0
+            ? browserAPI.storage.local.set({ fex_syncPending: { ...oSyncPending } })
+            : browserAPI.storage.local.remove('fex_syncPending'));
+    }
+
+    /**
+     * Applies a completed sync write to the pending set. Only the newest write issued
+     * for a key may decide that key's state: writes settle out of order, so an older
+     * success must not erase what a newer rejection recorded, and an older rejection
+     * must not resurrect what a newer success cleared. Either way the loser is the
+     * write the user superseded.
+     *
+     * @param {string} pKey - fex_* setting key
+     * @param {number} pSeq - issue order of the completed write
+     * @param {*} pValue - value to leave pending, or undefined when the write landed
+     */
+    function settleSyncWrite(pKey, pSeq, pValue) {
+
+        if (oSyncWriteSeq[pKey] !== pSeq) return;
+
+        if (pValue === undefined) {
+
+            if (oSyncPending[pKey] === undefined) return;
+
+            delete oSyncPending[pKey];
+
+        } else {
+            oSyncPending[pKey] = pValue;
+        }
+
+        persistSyncPending();
+    }
+
+    /**
+     * Refreshes a pre-paint mirror value, best effort. localStorage throws in
+     * Firefox private windows and that must never divert init - boot.js is the
+     * only reader and falls back to the CSS defaults on its own.
+     * @param {string} pKey - mirror key
+     * @param {*} pValue - value to store
+     */
+    function writeMirror(pKey, pValue) {
+
+        try {
+            localStorage.setItem(pKey, String(pValue));
+        } catch (_e) { /* pre-paint restore degrades to CSS defaults */ }
+    }
+
+    /**
+     * Persists a roaming preference to sync, local and the pre-paint mirror.
+     * A sync failure is non-fatal, but it is remembered: sync keeps the older value
+     * and would otherwise win the next merge and undo this change.
+     * @param {string} pKey - fex_* setting key
+     * @param {*} pValue - value to store
+     */
+    function saveSetting(pKey, pValue) {
+
+        const nSeq = ++nSyncWriteSeq;
+
+        /* Record the intent before the sync write is even issued. Recording it from the
+         * rejection handler loses it when the popup closes first: the document unloads,
+         * the handler never runs, and the next open merges stale sync over the new local
+         * value. One local.set carries the preference and the pending snapshot together
+         * so the two can never land apart. */
+        oSyncWriteSeq[pKey] = nSeq;
+        oSyncPending[pKey] = pValue;
+
+        guardWrite(browserAPI.storage.local.set({
+            [pKey]: pValue,
+            fex_syncPending: { ...oSyncPending }
+        }));
+
+        browserAPI.storage.sync.set({ [pKey]: pValue })
+            .then(() => settleSyncWrite(pKey, nSeq, undefined))
+            .catch((pErr) => {
+
+                console.warn('[FEX] settings write', pErr);
+                settleSyncWrite(pKey, nSeq, pValue);
+            });
+
+        if (FEX_MIRROR_KEYS.includes(pKey)) writeMirror(pKey, pValue);
+    }
+
+    /**
+     * Persists the popup dimensions to local storage and the pre-paint mirror.
+     * @param {number} pWidth - clamped width in px
+     * @param {number} pHeight - clamped height in px
+     */
+    function savePopupSize(pWidth, pHeight) {
+
+        guardWrite(browserAPI.storage.local.set({ fex_popupWidth: pWidth, fex_popupHeight: pHeight }));
+        writeMirror('fex_popupWidth', pWidth);
+        writeMirror('fex_popupHeight', pHeight);
     }
 
     /* ──── Restore Settings ──── */
 
-    const oSettings = await browserAPI.storage.local.get(['fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter', 'fex_popupWidth', 'fex_popupHeight']);
+    const [oLocal, oSync] = await Promise.all([
+        browserAPI.storage.local.get([...FEX_ROAMING_KEYS, ...FEX_SIZE_KEYS, 'fex_settingsMigrated', 'fex_syncPending']),
+        browserAPI.storage.sync.get(FEX_ROAMING_KEYS).catch(() => ({}))
+    ]);
 
-    if (oSettings.fex_darkMode) {
-        document.body.classList.add('theme-dark');
-        if (oDarkToggle) oDarkToggle.classList.add('active');
+    const oSettings = { ...oLocal };
+
+    FEX_ROAMING_KEYS.forEach((pKey) => {
+
+        if (oSync[pKey] !== undefined) oSettings[pKey] = oSync[pKey];
+    });
+
+    /* A value sync rejected is the user's latest explicit intent, so it outranks the
+     * older copy sync still holds. Runs on every open, whatever the migration state. */
+    Object.assign(oSyncPending, oLocal.fex_syncPending || {});
+
+    FEX_ROAMING_KEYS.forEach((pKey) => {
+
+        if (oSyncPending[pKey] !== undefined) oSettings[pKey] = oSyncPending[pKey];
+    });
+
+    /* v1.1.1 stored a boolean; v1.2.0 stores 'auto' | 'on' | 'off' */
+    if (oSettings.fex_darkMode === true) {
+        oSettings.fex_darkMode = 'on';
+    } else if (oSettings.fex_darkMode === false) {
+        oSettings.fex_darkMode = 'off';
+    } else if (!oSettings.fex_darkMode) {
+        oSettings.fex_darkMode = 'auto';
     }
 
-    if (oSettings.fex_compactMode) {
-        document.body.classList.add('fe-compact');
-        if (oCompactToggle) oCompactToggle.classList.add('active');
+    /* Keep the local fallback equal to what sync just resolved to. Only keys with a
+     * real source get written: persisting the migration's 'auto' default would make a
+     * device that never chose a theme look like it had, and the copy-forward gate below
+     * reads exactly that to decide what may be published. */
+    const oReconcile = {};
+
+    FEX_ROAMING_KEYS.forEach((pKey) => {
+
+        const bSourced = oLocal[pKey] !== undefined
+            || oSync[pKey] !== undefined
+            || oSyncPending[pKey] !== undefined;
+
+        if (bSourced && oSettings[pKey] !== undefined && oSettings[pKey] !== oLocal[pKey]) {
+            oReconcile[pKey] = oSettings[pKey];
+        }
+    });
+
+    if (Object.keys(oReconcile).length > 0) {
+        guardWrite(browserAPI.storage.local.set(oReconcile));
     }
+
+    /* Re-attempt the push sync rejected earlier. On another failure the set stays put
+     * and the next open tries again. */
+    if (Object.keys(oSyncPending).length > 0) {
+
+        const oRetry = { ...oSyncPending };
+        const nRetrySeq = ++nSyncWriteSeq;
+
+        Object.keys(oRetry).forEach((pKey) => { oSyncWriteSeq[pKey] = nRetrySeq; });
+
+        browserAPI.storage.sync.set(oRetry)
+            .then(() => {
+
+                Object.keys(oRetry).forEach((pKey) => settleSyncWrite(pKey, nRetrySeq, undefined));
+            })
+            .catch(() => { /* the entries stand as they are - retried on the next open */ });
+    }
+
+    /* One-time copy-forward per device: push pre-sync preferences up for keys sync
+     * does not know yet. The marker is set only once the write actually lands. */
+    if (!oLocal.fex_settingsMigrated) {
+
+        const oCopyForward = {};
+
+        /* Gate on the raw local read, not the merged object: the tri-state migration
+         * defaults fex_darkMode to 'auto', and publishing that from a device that never
+         * stored a theme would overwrite another device's explicit choice. A pending
+         * value is that same explicit intent, so it qualifies too - and it carries the
+         * value the retry above sends, so the two writes cannot disagree. */
+        FEX_ROAMING_KEYS.forEach((pKey) => {
+
+            const bHeldLocally = oLocal[pKey] !== undefined || oSyncPending[pKey] !== undefined;
+
+            if (oSync[pKey] === undefined && bHeldLocally) oCopyForward[pKey] = oSettings[pKey];
+        });
+
+        browserAPI.storage.sync.set(oCopyForward)
+            .then(() => browserAPI.storage.local.set({ fex_settingsMigrated: true }))
+            .catch(() => { /* retried on the next popup open */ });
+    }
+
+    writeMirror('fex_darkMode', oSettings.fex_darkMode);
+    writeMirror('fex_compactMode', oSettings.fex_compactMode === true);
+
+    if (oSettings.fex_popupWidth) writeMirror('fex_popupWidth', oSettings.fex_popupWidth);
+    if (oSettings.fex_popupHeight) writeMirror('fex_popupHeight', oSettings.fex_popupHeight);
+
+    /* ──── Theme & Compact Mode ──── */
+
+    const oRoot = document.documentElement;
+    const oDarkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const FEX_THEME_CYCLE = ['auto', 'on', 'off'];
+
+    let sThemeMode = oSettings.fex_darkMode;
+    let bCompact = oSettings.fex_compactMode === true;
+
+    /**
+     * Resolves a theme mode to the appearance it produces.
+     * @param {string} pMode - 'auto', 'on' or 'off'
+     * @param {boolean} pOsDark - whether the OS currently prefers dark
+     * @returns {boolean} true when the mode paints dark
+     */
+    function isEffectiveDark(pMode, pOsDark) {
+
+        return pMode === 'on' || (pMode === 'auto' && pOsDark);
+    }
+
+    /**
+     * Paints the current mode. The OS preference is passed in so a click applies the same
+     * observation it selected the mode from; callers without a sample read it fresh.
+     * @param {boolean} [pOsDark] - sampled OS preference
+     */
+    function applyThemeMode(pOsDark) {
+
+        const bOsDark = pOsDark === undefined ? oDarkQuery.matches : pOsDark;
+        const bDark = isEffectiveDark(sThemeMode, bOsDark);
+
+        oRoot.classList.toggle('theme-dark', bDark);
+
+        if (!oDarkToggle) return;
+
+        oDarkToggle.classList.toggle('active', bDark);
+        oDarkToggle.title = `Theme: ${sThemeMode === 'auto' ? 'Auto' : (sThemeMode === 'on' ? 'Dark' : 'Light')}`;
+    }
+
+    applyThemeMode();
+
+    oRoot.classList.toggle('fe-compact', bCompact);
+    if (oCompactToggle) oCompactToggle.classList.toggle('active', bCompact);
+
+    oDarkQuery.addEventListener('change', () => {
+
+        if (sThemeMode === 'auto') applyThemeMode();
+    });
+
+    oDarkToggle?.addEventListener('click', () => {
+
+        /* One observation drives the selection and the paint. Reading the media query twice
+         * would let a flip between them store a mode that disagrees with what was painted. */
+        const bOsDark = oDarkQuery.matches;
+        const bCurrentDark = isEffectiveDark(sThemeMode, bOsDark);
+        const nAt = FEX_THEME_CYCLE.indexOf(sThemeMode);
+
+        /* Three modes over two appearances, so advancing blindly produces a click that
+         * changes nothing - auto to on under a dark OS, off to auto under a light one.
+         * Skip a candidate that looks the same as what is already on screen. */
+        let sNext = FEX_THEME_CYCLE[(nAt + 1) % FEX_THEME_CYCLE.length];
+
+        if (isEffectiveDark(sNext, bOsDark) === bCurrentDark) {
+            sNext = FEX_THEME_CYCLE[(nAt + 2) % FEX_THEME_CYCLE.length];
+        }
+
+        sThemeMode = sNext;
+        applyThemeMode(bOsDark);
+        saveSetting('fex_darkMode', sThemeMode);
+    });
+
+    oCompactToggle?.addEventListener('click', () => {
+
+        bCompact = !bCompact;
+        oRoot.classList.toggle('fe-compact', bCompact);
+        oCompactToggle.classList.toggle('active', bCompact);
+        saveSetting('fex_compactMode', bCompact);
+    });
 
     if (oSettings.fex_viewMode && oViewModeSelect) {
         oViewModeSelect.value = oSettings.fex_viewMode;
@@ -169,25 +543,40 @@ const runFieldExplorer = async () => {
 
     /* ──── Restore Popup Size ──── */
 
+    /* Chrome caps popup windows at 800x600; staying under the cap keeps the
+     * shrink-to-fit path out of the degenerate boundary case */
     const nMinWidth = 350;
-    const nMaxWidth = 800;
+    const nMaxWidth = 792;
     const nMinHeight = 300;
-    const nMaxHeight = 600;
+    const nMaxHeight = 592;
 
     if (oSettings.fex_popupWidth) {
-        document.body.style.width = Math.min(Math.max(oSettings.fex_popupWidth, nMinWidth), nMaxWidth) + 'px';
+
+        const sWidth = Math.min(Math.max(parseInt(oSettings.fex_popupWidth, 10) || nMinWidth, nMinWidth), nMaxWidth) + 'px';
+
+        if (oRoot.style.getPropertyValue('--fe-width') !== sWidth) oRoot.style.setProperty('--fe-width', sWidth);
     }
+
     if (oSettings.fex_popupHeight) {
-        document.body.style.height = Math.min(Math.max(oSettings.fex_popupHeight, nMinHeight), nMaxHeight) + 'px';
+
+        const sHeight = Math.min(Math.max(parseInt(oSettings.fex_popupHeight, 10) || nMinHeight, nMinHeight), nMaxHeight) + 'px';
+
+        if (oRoot.style.getPropertyValue('--fe-height') !== sHeight) oRoot.style.setProperty('--fe-height', sHeight);
     }
 
     /* ──── Resize Handle ──── */
 
     const oResizeHandle = document.getElementById('resizeHandle');
+
     if (oResizeHandle) {
 
         let bDragging = false;
-        let nStartX, nStartY, nStartW, nStartH;
+        let nStartX = 0;
+        let nStartY = 0;
+        let nStartW = 0;
+        let nStartH = 0;
+        let nNewW = 0;
+        let nNewH = 0;
 
         oResizeHandle.addEventListener('mousedown', (pEvent) => {
 
@@ -197,6 +586,8 @@ const runFieldExplorer = async () => {
             nStartY = pEvent.screenY;
             nStartW = document.body.offsetWidth;
             nStartH = document.body.offsetHeight;
+            nNewW = nStartW;
+            nNewH = nStartH;
             document.body.classList.add('fe-resizing');
             oResizeHandle.classList.add('dragging');
         });
@@ -204,24 +595,64 @@ const runFieldExplorer = async () => {
         document.addEventListener('mousemove', (pEvent) => {
 
             if (!bDragging) return;
-            const nNewW = Math.min(Math.max(nStartW - (pEvent.screenX - nStartX), nMinWidth), nMaxWidth);
-            const nNewH = Math.min(Math.max(nStartH + (pEvent.screenY - nStartY), nMinHeight), nMaxHeight);
-            document.body.style.width = nNewW + 'px';
-            document.body.style.height = nNewH + 'px';
+
+            nNewW = Math.min(Math.max(nStartW - (pEvent.screenX - nStartX), nMinWidth), nMaxWidth);
+            nNewH = Math.min(Math.max(nStartH + (pEvent.screenY - nStartY), nMinHeight), nMaxHeight);
+            oRoot.style.setProperty('--fe-width', nNewW + 'px');
+            oRoot.style.setProperty('--fe-height', nNewH + 'px');
         });
 
         document.addEventListener('mouseup', () => {
 
             if (!bDragging) return;
+
             bDragging = false;
             document.body.classList.remove('fe-resizing');
             oResizeHandle.classList.remove('dragging');
-            browserAPI.storage.local.set({
-                fex_popupWidth: document.body.offsetWidth,
-                fex_popupHeight: document.body.offsetHeight
-            });
+            savePopupSize(nNewW, nNewH);
         });
     }
+
+    /* ──── Sortable Headers ──── */
+
+    const aTableHeaders = document.querySelectorAll('#bodyFieldsTableOuter thead th');
+
+    aTableHeaders.forEach((pTh, pIndex) => {
+
+        pTh.tabIndex = 0;
+        pTh.title = 'Click to sort';
+
+        const fnSort = () => {
+
+            if (nSortColumn === pIndex) {
+                bSortAsc = !bSortAsc;
+            } else {
+                nSortColumn = pIndex;
+                bSortAsc = true;
+            }
+
+            aTableHeaders.forEach((pHeader) => {
+
+                pHeader.textContent = pHeader.textContent.replace(/ ▲| ▼/g, '');
+                pHeader.removeAttribute('aria-sort');
+            });
+
+            pTh.textContent += bSortAsc ? ' ▲' : ' ▼';
+            pTh.setAttribute('aria-sort', bSortAsc ? 'ascending' : 'descending');
+
+            renderBodyFields();
+        };
+
+        pTh.addEventListener('click', fnSort);
+
+        pTh.addEventListener('keydown', (pEvent) => {
+
+            if (pEvent.key !== 'Enter' && pEvent.key !== ' ') return;
+            if (pEvent.key === ' ') pEvent.preventDefault();
+
+            fnSort();
+        });
+    });
 
     /* Apply view mode immediately so the correct view is visible while data loads */
     applyViewMode();
@@ -229,7 +660,7 @@ const runFieldExplorer = async () => {
     /* ──── View Mode Switching & Deferred Render ──── */
 
     /** Renders all record views if data is available */
-    window.fexRenderIfReady = () => {
+    window.fex.renderIfReady = () => {
 
         if (!oRecord) {
             applyViewMode();
@@ -237,36 +668,7 @@ const runFieldExplorer = async () => {
         }
 
         renderRecordInfo();
-        renderBodyFields();
-
-        const oTableHeaders = document.querySelectorAll('#bodyFieldsTableOuter thead th');
-        oTableHeaders.forEach((pTh, pIndex) => {
-
-            if (pTh._fexSortBound) return;
-            pTh._fexSortBound = true;
-            pTh.style.cursor = 'pointer';
-            pTh.title = 'Click to sort';
-            pTh.addEventListener('click', () => {
-
-                if (nSortColumn === pIndex) {
-                    bSortAsc = !bSortAsc;
-                } else {
-                    nSortColumn = pIndex;
-                    bSortAsc = true;
-                }
-
-                oTableHeaders.forEach((pH) => {
-                    pH.textContent = pH.textContent.replace(/ ▲| ▼/g, '');
-                });
-                pTh.textContent += bSortAsc ? ' ▲' : ' ▼';
-
-                renderBodyFields();
-            });
-        });
-
         renderSublistSelector();
-        renderActiveSublist();
-        renderRawJson();
         updateLinks();
         applyViewMode();
     };
@@ -274,39 +676,57 @@ const runFieldExplorer = async () => {
     /** Applies the current view mode (new vs legacy) and updates container visibility. */
     function applyViewMode() {
 
-        /* Don't touch visibility if Nav Manager is open */
-        const oNavPanel = document.getElementById('navManagerPanel');
-        if (oNavPanel && oNavPanel.classList.contains('visible')) return;
-
-        const sMode = oViewModeSelect?.value || 'new';
+        if (window.fex.navOpen) return;
 
         /* No record loaded — show the non-record message in the target view */
         if (!oRecord && sNonRecordMsg) {
-            showNonRecordMessage(sNonRecordMsg);
+            showNonRecordMessage(sNonRecordMsg, sNonRecordClass);
             return;
         }
 
-        if (sMode === 'legacy') {
+        if (getViewMode() === 'legacy') {
+
             oTabBar.style.display = 'none';
             oContainer.style.display = 'none';
-            oLegacyContainer.style.display = 'block';
+            oLegacyContainer.style.display = '';
             renderLegacyView();
+            return;
+        }
+
+        oTabBar.style.display = '';
+        oContainer.style.display = '';
+        oLegacyContainer.style.display = 'none';
+
+        if (!oRecord) return;
+
+        updateFieldCount();
+        renderActivePanel();
+    }
+
+    /**
+     * Renders the panel the user is looking at and marks the other two stale so
+     * they re-render on their next activation instead of on every keystroke.
+     */
+    function renderActivePanel() {
+
+        const sActive = document.querySelector('.tab-panel.active')?.id || 'panelBody';
+
+        oDirty.body = sActive !== 'panelBody';
+        oDirty.sublists = sActive !== 'panelSublists';
+        oDirty.raw = sActive !== 'panelRaw';
+
+        if (sActive === 'panelBody') {
+            renderBodyFields();
+        } else if (sActive === 'panelSublists') {
+            renderActiveSublist();
         } else {
-            oTabBar.style.display = 'flex';
-            oContainer.style.display = 'block';
-            oLegacyContainer.style.display = 'none';
-            if (oRecord) {
-                updateFieldCount();
-                renderBodyFields();
-                renderActiveSublist();
-                renderRawJson();
-            }
+            renderRawJson();
         }
     }
 
     oViewModeSelect?.addEventListener('change', () => {
 
-        browserAPI.storage.local.set({ fex_viewMode: oViewModeSelect.value });
+        saveSetting('fex_viewMode', oViewModeSelect.value);
         applyViewMode();
     });
 
@@ -314,64 +734,93 @@ const runFieldExplorer = async () => {
 
     oFieldFilterSelect?.addEventListener('change', () => {
 
-        browserAPI.storage.local.set({ fex_fieldFilter: oFieldFilterSelect.value });
+        saveSetting('fex_fieldFilter', oFieldFilterSelect.value);
+
         if (!oRecord) return;
+
         updateFieldCount();
-        const sMode = oViewModeSelect?.value || 'new';
-        if (sMode === 'legacy') {
+
+        if (getViewMode() === 'legacy') {
             renderLegacyView();
-        } else {
-            renderBodyFields();
-            renderActiveSublist();
-            renderRawJson();
+            return;
         }
-    });
 
-    /* ──── Toggle Handlers ──── */
-
-    oDarkToggle?.addEventListener('click', () => {
-
-        oDarkToggle.classList.toggle('active');
-        document.body.classList.toggle('theme-dark');
-        browserAPI.storage.local.set({ fex_darkMode: document.body.classList.contains('theme-dark') });
-    });
-
-    oCompactToggle?.addEventListener('click', () => {
-
-        oCompactToggle.classList.toggle('active');
-        document.body.classList.toggle('fe-compact');
-        browserAPI.storage.local.set({ fex_compactMode: document.body.classList.contains('fe-compact') });
+        renderSublistSelector();
+        renderActivePanel();
     });
 
     /* ──── Tab Switching ──── */
 
+    /**
+     * Activates a tab, moves the roving tabindex and renders the panel if stale.
+     * @param {HTMLElement} pBtn - tab button to activate
+     */
+    function activateTab(pBtn) {
+
+        aTabBtns.forEach((pOther) => {
+
+            const bActive = pOther === pBtn;
+
+            pOther.classList.toggle('active', bActive);
+            pOther.setAttribute('aria-selected', bActive ? 'true' : 'false');
+            pOther.tabIndex = bActive ? 0 : -1;
+        });
+
+        aTabPanels.forEach((pPanel) => pPanel.classList.remove('active'));
+
+        const sTarget = pBtn.dataset.tab;
+
+        document.getElementById(sTarget)?.classList.add('active');
+
+        if (!oRecord) return;
+
+        if (sTarget === 'panelBody' && oDirty.body) {
+            renderBodyFields();
+            oDirty.body = false;
+        } else if (sTarget === 'panelSublists' && oDirty.sublists) {
+            renderActiveSublist();
+            oDirty.sublists = false;
+        } else if (sTarget === 'panelRaw' && oDirty.raw) {
+            renderRawJson();
+            oDirty.raw = false;
+        }
+    }
+
     aTabBtns.forEach((pBtn) => {
 
-        pBtn.addEventListener('click', () => {
+        pBtn.addEventListener('click', () => activateTab(pBtn));
+    });
 
-            aTabBtns.forEach((pB) => pB.classList.remove('active'));
-            aTabPanels.forEach((pP) => pP.classList.remove('active'));
+    oTabBar?.addEventListener('keydown', (pEvent) => {
 
-            pBtn.classList.add('active');
-            const sTarget = pBtn.dataset.tab;
-            document.getElementById(sTarget).classList.add('active');
-        });
+        if (pEvent.key !== 'ArrowLeft' && pEvent.key !== 'ArrowRight') return;
+
+        const aBtns = Array.from(aTabBtns);
+        const nCurrent = aBtns.indexOf(document.activeElement);
+
+        if (nCurrent < 0) return;
+
+        pEvent.preventDefault();
+
+        const nNext = (nCurrent + (pEvent.key === 'ArrowRight' ? 1 : -1) + aBtns.length) % aBtns.length;
+
+        activateTab(aBtns[nNext]);
+        aBtns[nNext].focus();
     });
 
     /* ──── Search / Filter ──── */
 
-    oSearchBox?.addEventListener('input', () => {
+    oSearchBox?.addEventListener('input', fexDebounce(() => {
 
         if (!oRecord) return;
 
-        const sMode = oViewModeSelect?.value || 'new';
-        if (sMode === 'legacy') {
+        if (getViewMode() === 'legacy') {
             renderLegacyView();
-        } else {
-            renderBodyFields();
-            renderActiveSublist();
+            return;
         }
-    });
+
+        renderActivePanel();
+    }, 150));
 
     oSearchBox?.focus();
 
@@ -382,12 +831,78 @@ const runFieldExplorer = async () => {
         renderActiveSublist();
     });
 
+    /* One delegated pair for the whole sublist table - a capped render is still 500 rows wide */
+    oSublistTable?.addEventListener('click', (pEvent) => {
+
+        const oClickable = pEvent.target.closest?.('.clickable');
+
+        if (oClickable) copySublistTarget(oClickable);
+    });
+
+    oSublistTable?.addEventListener('keydown', (pEvent) => {
+
+        if (pEvent.key !== 'Enter' && pEvent.key !== ' ') return;
+
+        const oClickable = pEvent.target.closest?.('.clickable');
+
+        if (!oClickable) return;
+
+        if (pEvent.key === ' ') pEvent.preventDefault();
+
+        copySublistTarget(oClickable);
+    });
+
+    /* Lazily expanded legacy rows add anchors after render, so catch them on the way out */
+    oLegacyTree?.addEventListener('click', (pEvent) => {
+
+        const oAnchor = pEvent.target.closest?.('a[href]');
+
+        if (!oAnchor) return;
+
+        oAnchor.target = '_blank';
+        oAnchor.rel = 'noopener noreferrer';
+    }, true);
+
+    /* ──── CSV Helpers ──── */
+
+    /* Excel only detects UTF-8 in a downloaded CSV when the BOM is present */
+    const CSV_BOM = '\ufeff';
+
+    /**
+     * Quotes a CSV cell and neutralizes values a spreadsheet would evaluate.
+     * @param {*} pValue - cell value
+     * @returns {string} quoted, formula-safe cell
+     */
+    function toCsvCell(pValue) {
+
+        /* Half-width and full-width forms of the four spreadsheet formula leaders, plus
+         * the whitespace a leading formula can hide behind (OWASP CSV injection) */
+        const sValue = String(pValue ?? '');
+        const sGuarded = /^[=+\-@\t\r\n＝＋－＠]/.test(sValue) ? `'${sValue}` : sValue;
+
+        return `"${sGuarded.replace(/"/g, '""')}"`;
+    }
+
+    /**
+     * Serializes rows to CSV text with the BOM prefix.
+     * @param {Array<Array>} pRows - header row followed by data rows
+     * @returns {string} CSV document
+     */
+    function buildCsv(pRows) {
+
+        return CSV_BOM + pRows.map((pRow) => pRow.map((pCol) => toCsvCell(pCol)).join(',')).join('\n');
+    }
+
     /* ──── Export Handlers ──── */
+
+    /* Exports follow the field filter, ignore the search box and ignore the render cap */
 
     oExportJsonBtn?.addEventListener('click', () => {
 
         if (!oRecord) return;
+
         const sJson = JSON.stringify(buildExportObject(), null, 2);
+
         downloadFile(sJson, `${oRecord.sRecordType}_${oRecord.sId}.json`, 'application/json');
     });
 
@@ -395,40 +910,74 @@ const runFieldExplorer = async () => {
 
         if (!oRecord) return;
 
-        const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
         const aRows = [['Field ID', 'Value', 'Type']];
 
-        Object.entries(oFilteredBody).forEach(([pKey, pValue]) => {
+        Object.entries(filterFieldsByType(oRecord.oBodyFields)).forEach(([pKey, pValue]) => {
 
-            const sType = detectFieldType(pKey, pValue);
-            const sVal = (typeof pValue === 'object') ? JSON.stringify(pValue) : String(pValue ?? '');
-            aRows.push([pKey, sVal, sType]);
+            aRows.push([pKey, stringifyFieldValue(pValue), detectFieldType(pKey, pValue)]);
         });
 
-        const sCsv = aRows.map((pRow) => pRow.map((pCol) => `"${String(pCol).replace(/"/g, '""')}"`).join(',')).join('\n');
-        downloadFile(sCsv, `${oRecord.sRecordType}_${oRecord.sId}_fields.csv`, 'text/csv');
+        downloadFile(buildCsv(aRows), `${oRecord.sRecordType}_${oRecord.sId}_fields.csv`, 'text/csv');
     });
 
-    /* ──── Copy Raw JSON ──── */
+    oExportSublistCsvBtn?.addEventListener('click', () => {
+
+        if (!oRecord) return;
+
+        const sSelected = oSublistSelect?.value;
+        const aLines = sSelected ? oRecord.oSublists[sSelected] : null;
+
+        if (!aLines || aLines.length === 0) return;
+
+        const oColSet = new Set();
+
+        aLines.forEach((pLine) => Object.keys(pLine).forEach((pKey) => oColSet.add(pKey)));
+
+        const aCols = filterSublistCols(Array.from(oColSet));
+
+        if (aCols.length === 0) return;
+
+        const aRows = [['#', ...aCols]];
+
+        aLines.forEach((pLine, pIndex) => {
+
+            aRows.push([pIndex + 1, ...aCols.map((pCol) => formatDisplayValue(pLine[pCol]))]);
+        });
+
+        downloadFile(buildCsv(aRows), `${oRecord.sRecordType}_${oRecord.sId}_${sSelected}.csv`, 'text/csv');
+    });
+
+    /* ──── Copy Raw / Legacy JSON ──── */
 
     oCopyRawJsonBtn?.addEventListener('click', () => {
 
         if (!oRecord) return;
-        const sJson = JSON.stringify(buildExportObject(), null, 2);
-        copyButtonToClipboard(sJson, oCopyRawJsonBtn);
-    });
 
-    /* ──── Copy Legacy JSON ──── */
+        copyWithFeedback(JSON.stringify(buildExportObject(), null, 2), oCopyRawJsonBtn, {
+            label: 'Copied!',
+            duration: 1500,
+            labelTarget: oCopyRawJsonBtn.querySelector('span')
+        });
+    });
 
     oCopyLegacyJsonBtn?.addEventListener('click', () => {
 
         if (!oRecord) return;
-        const sJson = JSON.stringify(buildExportObject(), null, 2);
-        copyButtonToClipboard(sJson, oCopyLegacyJsonBtn);
+
+        copyWithFeedback(JSON.stringify(buildExportObject(), null, 2), oCopyLegacyJsonBtn, {
+            label: 'Copied!',
+            duration: 1500,
+            labelTarget: oCopyLegacyJsonBtn.querySelector('span')
+        });
     });
 
     /* ──── Export Object Builder ──── */
 
+    /**
+     * Builds the filtered record projection shared by the JSON export and the
+     * Raw JSON panel.
+     * @returns {Object} export payload
+     */
     function buildExportObject() {
 
         const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
@@ -444,21 +993,100 @@ const runFieldExplorer = async () => {
         };
     }
 
-    /* ──── Copy Button Helper ──── */
+    /* ──── Copy to Clipboard ──── */
 
-    function copyButtonToClipboard(pText, pBtn) {
+    /** @type {WeakMap<HTMLElement, {nTimer: number, aOriginal: Array<Node>}>} */
+    const oCopyState = new WeakMap();
 
-        navigator.clipboard.writeText(pText).then(() => {
+    /**
+     * Copies text and flashes the outcome on the element the user activated.
+     * Per-element state keeps two copies within the restore window from
+     * stranding a "Copied" label on either one.
+     *
+     * @param {string} pText - text to copy
+     * @param {HTMLElement} pElement - element carrying the feedback classes
+     * @param {Object} [pOpts] - { label, duration, labelTarget }
+     */
+    function copyWithFeedback(pText, pElement, pOpts) {
 
-            const oLabel = pBtn.querySelector('span');
-            oLabel.textContent = 'Copied!';
-            pBtn.classList.add('copied');
+        if (!pElement) return;
 
-            setTimeout(() => {
-                oLabel.textContent = 'Copy';
-                pBtn.classList.remove('copied');
-            }, 1500);
-        }).catch(() => {});
+        const oOpts = pOpts || {};
+        const oTarget = oOpts.labelTarget || pElement;
+        const oPending = oCopyState.get(pElement);
+        const nDuration = oOpts.duration || 1000;
+
+        /* Hold the nodes rather than the text: a cell rendered under an active
+         * search carries <mark> children that textContent would flatten away */
+        const aOriginal = oPending ? oPending.aOriginal : Array.from(oTarget.childNodes);
+
+        if (oPending) clearTimeout(oPending.nTimer);
+
+        const fnFlash = (pLabel, pClass, pDelay) => {
+
+            oTarget.textContent = pLabel;
+            pElement.classList.add(pClass);
+
+            const nTimer = setTimeout(() => {
+
+                oTarget.textContent = '';
+                aOriginal.forEach((pNode) => oTarget.appendChild(pNode));
+                pElement.classList.remove(pClass);
+                oCopyState.delete(pElement);
+            }, pDelay);
+
+            oCopyState.set(pElement, { nTimer: nTimer, aOriginal: aOriginal });
+        };
+
+        navigator.clipboard.writeText(pText)
+            .then(() => fnFlash(oOpts.label || '✓ Copied', 'copied', nDuration))
+            .catch(() => fnFlash('Copy failed', 'copy-error', 1500));
+    }
+
+    /**
+     * Builds the inner copy affordance for a table cell. Table elements keep
+     * their native semantics; the button role lives on this span.
+     *
+     * @param {string} pLabel - accessible label
+     * @param {DocumentFragment|string} pContent - visible content
+     * @param {string} [pClass] - class list, defaults to 'clickable'
+     * @returns {HTMLSpanElement}
+     */
+    function createCopySpan(pLabel, pContent, pClass) {
+
+        const oSpan = document.createElement('span');
+
+        oSpan.className = pClass || 'clickable';
+        oSpan.setAttribute('role', 'button');
+        oSpan.setAttribute('aria-label', pLabel);
+        oSpan.tabIndex = 0;
+        oSpan.title = 'Click to copy';
+
+        if (typeof pContent === 'string') {
+            oSpan.textContent = pContent;
+        } else {
+            oSpan.appendChild(pContent);
+        }
+
+        return oSpan;
+    }
+
+    /**
+     * Wires pointer and keyboard activation on a copy affordance.
+     * @param {HTMLElement} pElement - copy affordance
+     * @param {string} pText - text to copy
+     */
+    function bindCopyTarget(pElement, pText) {
+
+        pElement.addEventListener('click', () => copyWithFeedback(pText, pElement));
+
+        pElement.addEventListener('keydown', (pEvent) => {
+
+            if (pEvent.key !== 'Enter' && pEvent.key !== ' ') return;
+            if (pEvent.key === ' ') pEvent.preventDefault();
+
+            copyWithFeedback(pText, pElement);
+        });
     }
 
     /* ──── Download Helper ──── */
@@ -474,40 +1102,13 @@ const runFieldExplorer = async () => {
         const oBlob = new Blob([pContent], { type: pMimeType });
         const sUrl = URL.createObjectURL(oBlob);
         const oLink = document.createElement('a');
+
         oLink.href = sUrl;
         oLink.download = pFilename;
         document.body.appendChild(oLink);
         oLink.click();
         oLink.remove();
         URL.revokeObjectURL(sUrl);
-    }
-
-    /* ──── Copy to Clipboard ──── */
-
-    /**
-     * Copies text to clipboard and shows visual confirmation
-     * @param {string} pText - text to copy
-     * @param {HTMLElement} pElement - element to show confirmation on (optional)
-     */
-    /** Active copy timer, prevents overlapping restores */
-    let nCopyTimer = 0;
-
-    function copyToClipboard(pText, pElement) {
-
-        navigator.clipboard.writeText(pText).then(() => {
-
-            if (pElement) {
-                const sOriginalText = pElement.textContent;
-                pElement.textContent = '\u2713 Copied';
-                pElement.classList.add('copied');
-
-                clearTimeout(nCopyTimer);
-                nCopyTimer = setTimeout(() => {
-                    pElement.textContent = sOriginalText;
-                    pElement.classList.remove('copied');
-                }, 1000);
-            }
-        }).catch(() => {});
     }
 
     /* ──── Empty Row Helper ──── */
@@ -523,10 +1124,12 @@ const runFieldExplorer = async () => {
 
         const oTr = document.createElement('tr');
         const oTd = document.createElement('td');
+
         oTd.colSpan = pColSpan;
         oTd.className = pClass || 'empty-msg';
         oTd.textContent = pMessage;
         oTr.appendChild(oTd);
+
         return oTr;
     }
 
@@ -592,57 +1195,68 @@ const runFieldExplorer = async () => {
     /**
      * Shows a message across both new and legacy view containers.
      * @param {string} pText - message to display
+     * @param {string} [pClass] - message class ('empty-msg' or 'error-msg')
      */
-    function showNonRecordMessage(pText) {
+    function showNonRecordMessage(pText, pClass) {
 
         sNonRecordMsg = pText;
-        const sMode = oViewModeSelect?.value || 'new';
+        sNonRecordClass = pClass || 'empty-msg';
 
         oTabBar.style.display = 'none';
 
-        if (oExportJsonBtn) { oExportJsonBtn.disabled = true; oExportJsonBtn.style.opacity = '0.4'; }
-        if (oExportCsvBtn) { oExportCsvBtn.disabled = true; oExportCsvBtn.style.opacity = '0.4'; }
+        [oExportJsonBtn, oExportCsvBtn, oExportSublistCsvBtn].forEach((pBtn) => {
 
-        if (sMode === 'legacy') {
+            if (!pBtn) return;
+
+            pBtn.disabled = true;
+            pBtn.style.opacity = '0.4';
+        });
+
+        const oMsg = document.createElement('div');
+
+        oMsg.className = sNonRecordClass;
+        oMsg.textContent = pText;
+
+        if (getViewMode() === 'legacy') {
+
             oContainer.style.display = 'none';
             oLegacyTree.textContent = '';
-            const oMsg = document.createElement('div');
-            oMsg.className = 'empty-msg';
-            oMsg.textContent = pText;
             oLegacyTree.appendChild(oMsg);
-            oLegacyContainer.style.display = 'block';
-        } else {
-            oLegacyContainer.style.display = 'none';
-            oContainer.textContent = '';
-            const oMsg = document.createElement('div');
-            oMsg.className = 'empty-msg';
-            oMsg.textContent = pText;
-            oContainer.appendChild(oMsg);
-            oContainer.style.display = 'block';
+            oLegacyContainer.style.display = '';
+            return;
         }
+
+        oLegacyContainer.style.display = 'none';
+        oContainer.textContent = '';
+        oContainer.appendChild(oMsg);
+        oContainer.style.display = '';
     }
 
     const [oTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
 
-    if (!oTab || !oTab.url || !oTab.url.includes('netsuite.com')) {
+    let oTabUrl = null;
+
+    try {
+        oTabUrl = oTab?.url ? new URL(oTab.url) : null;
+    } catch (_e) {
+        oTabUrl = null;
+    }
+
+    if (!oTabUrl || !isNetSuiteHostname(oTabUrl.hostname)) {
 
         showNonRecordMessage('Not on a NetSuite page.');
         return;
     }
 
     /* Check if this looks like a record page (has standalone id= parameter) */
-    const oTabUrl = new URL(oTab.url);
-    const bHasRecordId = oTabUrl.searchParams.has('id');
+    if (!oTabUrl.searchParams.has('id')) {
 
-    if (!bHasRecordId) {
-
-        showNonRecordMessage('No record detected on this page. Use the 🗂️ Nav button to manage navigation menus.');
+        showNonRecordMessage('No record detected on this page. Use the Nav Manager button (folder icon) in the toolbar to manage navigation menus.');
         return;
     }
 
-    const oXmlUrl = new URL(oTab.url);
+    const oXmlUrl = new URL(oTabUrl);
     oXmlUrl.searchParams.set('xml', 'T');
-    const sXmlUrl = oXmlUrl.toString();
 
     try {
 
@@ -658,12 +1272,12 @@ const runFieldExplorer = async () => {
                     return { error: pErr.message };
                 }
             },
-            args: [sXmlUrl]
+            args: [oXmlUrl.toString()]
         });
 
         if (oResult.result?.error) {
 
-            showNonRecordMessage(`Failed to fetch record: ${oResult.result.error}`);
+            showNonRecordMessage(`Failed to fetch record: ${oResult.result.error}`, 'error-msg');
             return;
         }
 
@@ -682,10 +1296,10 @@ const runFieldExplorer = async () => {
         }
 
         /* Render all views (or defer if Nav Manager is open) */
-        window.fexRenderIfReady();
+        window.fex.renderIfReady();
 
     } catch (pErr) {
-        showNonRecordMessage(`Error: ${pErr.message}`);
+        showNonRecordMessage(`Error: ${pErr.message}`, 'error-msg');
     }
 
     /* ──── XML Parser ──── */
@@ -837,21 +1451,27 @@ const runFieldExplorer = async () => {
         aInfoParts.forEach((pPart) => {
 
             if (pPart.label) {
+
                 const oLabel = document.createElement('span');
+
                 oLabel.className = 'info-label';
                 oLabel.textContent = pPart.label;
                 oRecordInfo.appendChild(oLabel);
             }
 
-            const oVal = document.createElement('span');
-            oVal.className = pPart.cls || 'info-value clickable';
-            oVal.textContent = pPart.value;
+            if (pPart.cls) {
 
-            if (!pPart.cls) {
-                oVal.title = 'Click to copy';
-                oVal.addEventListener('click', () => copyToClipboard(oVal.textContent, oVal));
+                const oSep = document.createElement('span');
+
+                oSep.className = pPart.cls;
+                oSep.textContent = pPart.value;
+                oRecordInfo.appendChild(oSep);
+                return;
             }
 
+            const oVal = createCopySpan(`Copy ${pPart.value}`, pPart.value, 'info-value clickable');
+
+            bindCopyTarget(oVal, pPart.value);
             oRecordInfo.appendChild(oVal);
         });
 
@@ -863,18 +1483,12 @@ const runFieldExplorer = async () => {
 
         if (!oFieldCount || !oRecord) return;
 
-        const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
-        const oFilteredSublists = filterSublistsForLegacy(oRecord.oSublists);
-        const nBodyCount = Object.keys(oFilteredBody).length;
-        const nSublistCount = Object.keys(oFilteredSublists).length;
+        const nBodyCount = Object.keys(filterFieldsByType(oRecord.oBodyFields)).length;
         const sFilter = oFieldFilterSelect?.value || 'all';
+        const sLabel = sFilter === 'all' ? '' : (sFilter === 'custom' ? 'custom ' : 'standard ');
 
-        if (sFilter === 'all') {
-            oFieldCount.textContent = `${nBodyCount} fields · ${nSublistCount} sublists`;
-        } else {
-            const sLabel = sFilter === 'custom' ? 'custom' : 'standard';
-            oFieldCount.textContent = `${nBodyCount} ${sLabel} fields · ${nSublistCount} sublists`;
-        }
+        /* Sublists stay unfiltered so the badge always agrees with the dropdown */
+        oFieldCount.textContent = `${nBodyCount} ${sLabel}fields · ${oRecord.nSublistCount} sublists`;
     }
 
     /* ──── Render: Body Fields Table ──── */
@@ -887,32 +1501,33 @@ const runFieldExplorer = async () => {
         if (!oBodyFieldsTable || !oRecord) return;
 
         const sSearch = (oSearchBox?.value || '').toLowerCase();
-        const oFilteredByType = filterFieldsByType(oRecord.oBodyFields);
-        const aEntries = Object.entries(oFilteredByType);
+        const aEntries = Object.entries(filterFieldsByType(oRecord.oBodyFields));
 
         const aFiltered = sSearch
-            ? aEntries.filter(([pKey, pVal]) => {
-
-                const sVal = (typeof pVal === 'object') ? JSON.stringify(pVal) : String(pVal ?? '');
-                return pKey.toLowerCase().includes(sSearch) || sVal.toLowerCase().includes(sSearch);
-            })
+            ? aEntries.filter(([pKey, pVal]) =>
+                pKey.toLowerCase().includes(sSearch)
+                || stringifyFieldValue(pVal).toLowerCase().includes(sSearch))
             : aEntries;
 
         /* Sort if a column is selected */
         if (nSortColumn !== null) {
+
             aFiltered.sort((pA, pB) => {
+
                 let sValA = '';
                 let sValB = '';
+
                 if (nSortColumn === 0) {
                     sValA = pA[0].toLowerCase();
                     sValB = pB[0].toLowerCase();
                 } else if (nSortColumn === 1) {
-                    sValA = String(pA[1] != null ? pA[1] : '').toLowerCase();
-                    sValB = String(pB[1] != null ? pB[1] : '').toLowerCase();
+                    sValA = formatDisplayValue(pA[1]).toLowerCase();
+                    sValB = formatDisplayValue(pB[1]).toLowerCase();
                 } else if (nSortColumn === 2) {
                     sValA = detectFieldType(pA[0], pA[1]).toLowerCase();
                     sValB = detectFieldType(pB[0], pB[1]).toLowerCase();
                 }
+
                 if (sValA < sValB) return bSortAsc ? -1 : 1;
                 if (sValA > sValB) return bSortAsc ? 1 : -1;
                 return 0;
@@ -921,8 +1536,12 @@ const runFieldExplorer = async () => {
 
         if (aFiltered.length === 0) {
 
+            const sFilter = oFieldFilterSelect?.value || 'all';
+
             oBodyFieldsTable.textContent = '';
-            oBodyFieldsTable.appendChild(createEmptyRow(3, 'No fields match your search.'));
+            oBodyFieldsTable.appendChild(createEmptyRow(3, sSearch
+                ? 'No fields match your search.'
+                : (sFilter === 'all' ? 'No fields in this record.' : `No ${sFilter} fields in this record.`)));
             return;
         }
 
@@ -931,43 +1550,29 @@ const runFieldExplorer = async () => {
         aFiltered.forEach(([pKey, pValue]) => {
 
             const sType = detectFieldType(pKey, pValue);
-            const sIcon = getTypeIcon(sType);
-            const sDisplayVal = formatDisplayValue(pValue);
-
             const oRow = document.createElement('tr');
 
-            /* Field ID cell */
             const oIdTd = document.createElement('td');
             oIdTd.className = 'col-id';
-            const oIdSpan = document.createElement('span');
-            oIdSpan.className = 'clickable';
-            oIdSpan.title = 'Click to copy field ID';
-            oIdSpan.appendChild(highlightSearch(pKey, sSearch));
-            oIdSpan.addEventListener('click', () => copyToClipboard(pKey, oIdSpan));
+            const oIdSpan = createCopySpan(`Copy field ${pKey}`, highlightSearch(pKey, sSearch));
+            bindCopyTarget(oIdSpan, pKey);
             oIdTd.appendChild(oIdSpan);
             oRow.appendChild(oIdTd);
 
-            /* Value cell */
             const oValTd = document.createElement('td');
             oValTd.className = 'col-value';
-            const oValSpan = document.createElement('span');
-            oValSpan.className = 'clickable';
-            oValSpan.title = 'Click to copy value';
-            oValSpan.appendChild(highlightSearch(sDisplayVal, sSearch));
-            oValSpan.addEventListener('click', () => {
-                const sCopyVal = (typeof pValue === 'object') ? JSON.stringify(pValue) : String(pValue ?? '');
-                copyToClipboard(sCopyVal, oValSpan);
-            });
+            const sDisplayVal = formatDisplayValue(pValue);
+            const oValSpan = createCopySpan(`Copy value of ${pKey}`, highlightSearch(sDisplayVal, sSearch));
+            bindCopyTarget(oValSpan, stringifyFieldValue(pValue));
             oValTd.appendChild(oValSpan);
             oRow.appendChild(oValTd);
 
-            /* Type cell */
             const oTypeTd = document.createElement('td');
             oTypeTd.className = 'col-type';
             const oTypeBadge = document.createElement('span');
             oTypeBadge.className = 'type-badge';
             oTypeBadge.title = sType;
-            oTypeBadge.textContent = sIcon;
+            oTypeBadge.textContent = getTypeIcon(sType);
             oTypeTd.appendChild(oTypeBadge);
             oRow.appendChild(oTypeTd);
 
@@ -981,32 +1586,38 @@ const runFieldExplorer = async () => {
     /* ──── Render: Sublist Selector & Table ──── */
 
     /**
-     * Populates sublist dropdown selector
+     * Populates sublist dropdown selector, preserving the current selection.
      */
     function renderSublistSelector() {
 
         if (!oSublistSelect || !oRecord) return;
 
-        oSublistSelect.textContent = '';
-
+        const sPrevious = oSublistSelect.value;
         const aSublistNames = Object.keys(oRecord.oSublists);
+
+        oSublistSelect.textContent = '';
 
         if (aSublistNames.length === 0) {
 
             const oOpt = document.createElement('option');
+
+            oOpt.value = '';
+            oOpt.disabled = true;
             oOpt.textContent = 'No sublists found';
             oSublistSelect.appendChild(oOpt);
             return;
         }
 
-        aSublistNames.forEach(pName => {
+        aSublistNames.forEach((pName) => {
 
             const oOpt = document.createElement('option');
+
             oOpt.value = pName;
-            const nLineCount = oRecord.oSublists[pName].length;
-            oOpt.textContent = `${pName} (${nLineCount} lines)`;
+            oOpt.textContent = `${pName} (${oRecord.oSublists[pName].length} lines)`;
             oSublistSelect.appendChild(oOpt);
         });
+
+        if (aSublistNames.includes(sPrevious)) oSublistSelect.value = sPrevious;
     }
 
     /**
@@ -1016,102 +1627,161 @@ const runFieldExplorer = async () => {
 
         if (!oSublistTable || !oRecord) return;
 
+        aRenderedCols = [];
+        aRenderedLines = [];
+
         const sSelected = oSublistSelect?.value;
+        const sFilter = oFieldFilterSelect?.value || 'all';
 
         if (!sSelected || !oRecord.oSublists[sSelected]) {
+
             oSublistTable.textContent = '';
-            oSublistTable.appendChild(createEmptyRow(1, 'Select a sublist above.'));
+            oSublistTable.appendChild(createEmptyRow(1, oRecord.nSublistCount === 0
+                ? 'This record has no sublists.'
+                : 'Select a sublist above.'));
             return;
         }
 
         const aLines = oRecord.oSublists[sSelected];
 
         if (aLines.length === 0) {
+
             oSublistTable.textContent = '';
             oSublistTable.appendChild(createEmptyRow(1, 'No lines in this sublist.'));
             return;
         }
 
         const oColSet = new Set();
-        aLines.forEach(pLine => Object.keys(pLine).forEach(pKey => oColSet.add(pKey)));
-        let aCols = Array.from(oColSet);
 
-        aCols = filterSublistCols(aCols);
+        aLines.forEach((pLine) => Object.keys(pLine).forEach((pKey) => oColSet.add(pKey)));
+
+        const aCols = filterSublistCols(Array.from(oColSet));
+
+        if (aCols.length === 0) {
+
+            oSublistTable.textContent = '';
+            oSublistTable.appendChild(createEmptyRow(1, sFilter === 'all'
+                ? 'No fields in this sublist.'
+                : `No ${sFilter} fields in this sublist.`));
+            return;
+        }
 
         const sSearch = (oSearchBox?.value || '').toLowerCase();
 
         const aFilteredCols = sSearch
-            ? aCols.filter(pCol => {
-
-                if (pCol.toLowerCase().includes(sSearch)) return true;
-                return aLines.some(pLine => {
-
-                    const sVal = String(pLine[pCol] ?? '');
-                    return sVal.toLowerCase().includes(sSearch);
-                });
-            })
+            ? aCols.filter((pCol) =>
+                pCol.toLowerCase().includes(sSearch)
+                || aLines.some((pLine) => stringifyFieldValue(pLine[pCol]).toLowerCase().includes(sSearch)))
             : aCols;
 
         if (aFilteredCols.length === 0) {
+
             oSublistTable.textContent = '';
             oSublistTable.appendChild(createEmptyRow(1, 'No fields match your search.'));
             return;
         }
 
-        const oFrag = document.createDocumentFragment();
+        /* A column id hit keeps every line; otherwise a line needs a value hit */
+        const bColIdHit = !sSearch || aFilteredCols.some((pCol) => pCol.toLowerCase().includes(sSearch));
+        const aVisibleLines = [];
 
+        aLines.forEach((pLine, pIndex) => {
+
+            const bKeep = bColIdHit
+                || aFilteredCols.some((pCol) => stringifyFieldValue(pLine[pCol]).toLowerCase().includes(sSearch));
+
+            /* Line numbers stay absolute so a filtered view still maps back to the record */
+            if (bKeep) aVisibleLines.push({ nNumber: pIndex + 1, oLine: pLine });
+        });
+
+        if (aVisibleLines.length === 0) {
+
+            oSublistTable.textContent = '';
+            oSublistTable.appendChild(createEmptyRow(aFilteredCols.length + 1, 'No lines match your search.'));
+            return;
+        }
+
+        aRenderedCols = aFilteredCols;
+        aRenderedLines = aVisibleLines.slice(0, nSublistRenderCap);
+
+        const oFrag = document.createDocumentFragment();
         const oHeaderRow = document.createElement('tr');
+
         oHeaderRow.className = 'sublist-header';
 
         const oLineNumTh = document.createElement('th');
+
         oLineNumTh.textContent = '#';
         oHeaderRow.appendChild(oLineNumTh);
 
-        aFilteredCols.forEach(pCol => {
+        aFilteredCols.forEach((pCol) => {
 
             const oTh = document.createElement('th');
-            oTh.className = 'clickable';
-            oTh.title = 'Click to copy field ID';
-            oTh.textContent = pCol;
-            oTh.addEventListener('click', () => copyToClipboard(pCol, oTh));
+
+            oTh.appendChild(createCopySpan(`Copy field ${pCol}`, pCol));
             oHeaderRow.appendChild(oTh);
         });
 
         oFrag.appendChild(oHeaderRow);
 
-        aLines.forEach((pLine, pIndex) => {
+        aRenderedLines.forEach((pEntry) => {
 
             const oRow = document.createElement('tr');
-
             const oLineNumTd = document.createElement('td');
+
             oLineNumTd.className = 'line-num';
-            oLineNumTd.textContent = pIndex + 1;
+            oLineNumTd.textContent = pEntry.nNumber;
             oRow.appendChild(oLineNumTd);
 
-            aFilteredCols.forEach(pCol => {
+            aFilteredCols.forEach((pCol) => {
 
                 const oTd = document.createElement('td');
-                const vVal = pLine[pCol];
-                const sDisplay = formatDisplayValue(vVal);
+                const sDisplay = formatDisplayValue(pEntry.oLine[pCol]);
 
-                oTd.className = 'clickable';
-                oTd.title = 'Click to copy';
-                oTd.appendChild(highlightSearch(sDisplay, sSearch));
-
-                oTd.addEventListener('click', () => {
-
-                    const sCopy = (typeof vVal === 'object') ? JSON.stringify(vVal) : String(vVal ?? '');
-                    copyToClipboard(sCopy, oTd);
-                });
-
+                oTd.appendChild(createCopySpan(`Copy value of ${pCol}`, highlightSearch(sDisplay, sSearch)));
                 oRow.appendChild(oTd);
             });
 
             oFrag.appendChild(oRow);
         });
 
+        if (aVisibleLines.length > nSublistRenderCap) {
+
+            oFrag.appendChild(createEmptyRow(aFilteredCols.length + 1,
+                `Showing first ${nSublistRenderCap} of ${aVisibleLines.length} lines - use search to narrow.`));
+        }
+
         oSublistTable.textContent = '';
         oSublistTable.appendChild(oFrag);
+    }
+
+    /**
+     * Copies the cell or header behind a delegated sublist activation.
+     * @param {HTMLElement} pClickable - activated copy affordance
+     */
+    function copySublistTarget(pClickable) {
+
+        const oCell = pClickable.closest('td, th');
+        const oRow = oCell?.parentElement;
+
+        if (!oCell || !oRow) return;
+
+        /* Column 0 is the line-number gutter, row 0 is the header row */
+        const nColIndex = oCell.cellIndex - 1;
+
+        if (nColIndex < 0 || nColIndex >= aRenderedCols.length) return;
+
+        const sCol = aRenderedCols[nColIndex];
+
+        if (oCell.tagName === 'TH') {
+
+            copyWithFeedback(sCol, pClickable);
+            return;
+        }
+
+        const oEntry = aRenderedLines[oRow.rowIndex - 1];
+
+        if (oEntry) copyWithFeedback(stringifyFieldValue(oEntry.oLine[sCol]), pClickable);
     }
 
     /* ──── Render: Raw JSON ──── */
@@ -1123,28 +1793,16 @@ const runFieldExplorer = async () => {
 
         if (!oRawJsonContainer || !oRecord) return;
 
-        const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
-        const oFilteredSublists = filterSublistsForLegacy(oRecord.oSublists);
-
-        const oExport = {
-            sRecordType: oRecord.sRecordType,
-            sId: oRecord.sId,
-            oBodyFields: oFilteredBody,
-            oSublists: oFilteredSublists,
-            nBodyFieldCount: Object.keys(oFilteredBody).length,
-            nSublistCount: Object.keys(oFilteredSublists).length
-        };
-
-        const sJson = JSON.stringify(oExport, null, 2);
         let oPre = oRawJsonContainer.querySelector('.raw-json');
 
         if (!oPre) {
+
             oPre = document.createElement('pre');
             oPre.className = 'raw-json';
             oRawJsonContainer.appendChild(oPre);
         }
 
-        oPre.textContent = sJson;
+        oPre.textContent = JSON.stringify(buildExportObject(), null, 2);
     }
 
     /* ──── Render: Legacy Mode (JSONFormatter) ──── */
@@ -1158,14 +1816,11 @@ const runFieldExplorer = async () => {
 
         const sSearch = (oSearchBox?.value || '').toLowerCase();
 
-        const oFilteredBody = filterFieldsByType(oRecord.oBodyFields);
-        const oFilteredSublists = filterSublistsForLegacy(oRecord.oSublists);
-
         const oLegacyData = {
             recordType: oRecord.sRecordType,
             id: oRecord.sId,
-            bodyFields: oFilteredBody,
-            lineFields: oFilteredSublists
+            bodyFields: filterFieldsByType(oRecord.oBodyFields),
+            lineFields: filterSublistsForLegacy(oRecord.oSublists)
         };
 
         /* Apply search filter if searching */
@@ -1181,10 +1836,9 @@ const runFieldExplorer = async () => {
         oLegacyTree.appendChild(oFormatter.render());
 
         if (sSearch) {
-            const oRegex = new RegExp('(' + escapeRegex(sSearch) + ')', 'gi');
-            const oWalker = document.createTreeWalker(
-                oLegacyTree, NodeFilter.SHOW_TEXT
-            );
+
+            const oRegex = new RegExp(escapeRegex(sSearch), 'i');
+            const oWalker = document.createTreeWalker(oLegacyTree, NodeFilter.SHOW_TEXT);
             const aNodesToSplit = [];
 
             while (oWalker.nextNode()) {
@@ -1192,35 +1846,23 @@ const runFieldExplorer = async () => {
                 if (oRegex.test(oWalker.currentNode.textContent)) {
                     aNodesToSplit.push(oWalker.currentNode);
                 }
-                oRegex.lastIndex = 0;
             }
 
             aNodesToSplit.forEach((pNode) => {
 
                 const oWrapper = document.createElement('span');
-                const sText = pNode.textContent;
-                let nLast = 0;
-                let aFound;
 
-                while ((aFound = oRegex.exec(sText)) !== null) {
-
-                    if (aFound.index > nLast) {
-                        oWrapper.appendChild(document.createTextNode(sText.slice(nLast, aFound.index)));
-                    }
-                    const oHl = document.createElement('span');
-                    oHl.className = 'searchresult';
-                    oHl.textContent = aFound[1];
-                    oWrapper.appendChild(oHl);
-                    nLast = oRegex.lastIndex;
-                }
-
-                if (nLast < sText.length) {
-                    oWrapper.appendChild(document.createTextNode(sText.slice(nLast)));
-                }
-
+                oWrapper.appendChild(highlightSearch(pNode.textContent, sSearch, 'span', 'searchresult'));
                 pNode.parentNode.replaceChild(oWrapper, pNode);
             });
         }
+
+        /* Anchors rendered from http-prefixed field values would navigate the popup away */
+        oLegacyTree.querySelectorAll('a[href]').forEach((pAnchor) => {
+
+            pAnchor.target = '_blank';
+            pAnchor.rel = 'noopener noreferrer';
+        });
     }
 
     /**
@@ -1232,8 +1874,7 @@ const runFieldExplorer = async () => {
      */
     function filterLegacyRecord(pObject, pSearchTerm) {
 
-        const sUpper = pSearchTerm.toUpperCase();
-        return deepFilterObject(pObject, sUpper);
+        return deepFilterObject(pObject, pSearchTerm.toUpperCase());
     }
 
     /**
@@ -1251,13 +1892,18 @@ const runFieldExplorer = async () => {
         Object.entries(pObj).forEach(([pKey, pValue]) => {
 
             if (typeof pValue !== 'object' || pValue === null) {
+
                 const sKeyStr = String(pKey).toUpperCase();
                 const sValStr = String(pValue ?? '').toUpperCase();
+
                 if (sKeyStr.includes(pSearchUpper) || sValStr.includes(pSearchUpper)) {
                     oResult[pKey] = pValue;
                 }
+
             } else {
+
                 const oFiltered = deepFilterObject(pValue, pSearchUpper);
+
                 if (Object.keys(oFiltered).length > 0) {
                     oResult[pKey] = oFiltered;
                 }
@@ -1315,14 +1961,17 @@ const runFieldExplorer = async () => {
     }
 
     /**
-     * Creates a DocumentFragment with search term matches wrapped in <mark> elements.
+     * Creates a DocumentFragment with search term matches wrapped in highlight elements.
      * @param {string} pText - text to highlight
      * @param {string} pSearch - lowercase search term
-     * @returns {DocumentFragment} fragment with text nodes and <mark> elements
+     * @param {string} [pTag] - element name for matches (default: 'mark')
+     * @param {string} [pClass] - class applied to match elements
+     * @returns {DocumentFragment} fragment with text nodes and highlight elements
      */
-    function highlightSearch(pText, pSearch) {
+    function highlightSearch(pText, pSearch, pTag = 'mark', pClass = '') {
 
         const oFrag = document.createDocumentFragment();
+
         if (!pText) return oFrag;
 
         if (!pSearch) {
@@ -1340,9 +1989,12 @@ const runFieldExplorer = async () => {
                 oFrag.appendChild(document.createTextNode(pText.slice(nLastIndex, aMatch.index)));
             }
 
-            const oMark = document.createElement('mark');
-            oMark.textContent = aMatch[1];
-            oFrag.appendChild(oMark);
+            const oHit = document.createElement(pTag);
+
+            if (pClass) oHit.className = pClass;
+
+            oHit.textContent = aMatch[1];
+            oFrag.appendChild(oHit);
             nLastIndex = oRegex.lastIndex;
         }
 

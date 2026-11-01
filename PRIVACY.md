@@ -1,6 +1,6 @@
 # Privacy Policy - NetSuite Field Explorer EX
 
-**Last updated:** February 8, 2026
+**Last updated:** August 4, 2026
 
 ## Data Collection
 
@@ -10,23 +10,29 @@ NetSuite Field Explorer EX does **not** collect, transmit, or store any personal
 
 All data is retrieved **live from the page context** by fetching the record's XML representation (`&xml=T`) via NetSuite's native HTTP interface. The extension runs entirely within your browser and communicates only with the NetSuite page you are currently viewing.
 
-## What Is Stored Locally
+## What Is Stored
 
-The extension uses your browser's local storage (`chrome.storage.local`) to persist the following **user preferences only**:
+The extension stores **user preferences only** - nothing else.
 
-- Dark / Light mode selection
+In your browser's synced storage (`chrome.storage.sync`), with a mirrored copy in local storage as an offline fallback:
+
+- Theme selection (Auto / Dark / Light)
 - Compact mode toggle
 - View mode preference (New / Legacy)
 - Field filter preference (All / Custom / Standard)
+
+In your browser's local storage (`chrome.storage.local`) only, never synced:
+
+- Popup width and height
 - Nav Manager hidden menu selections (per account and global)
 
-These preferences are stored locally in your browser and are **never transmitted** to any external server.
+The extension itself **never transmits anything** to any external server. If you have your browser's built-in sync turned on, the four display preferences above may be synced across your devices by your browser vendor (Google, Microsoft, or Mozilla) under their privacy policy. That transfer is performed by the browser, not by this extension, and carries no record data - only the preference flags listed above. Turning off browser sync, or signing out of your browser profile, keeps everything on the device.
 
 ## No External Servers
 
 This extension does **not**:
 
-- Send data to any external server or third-party service
+- Send data to any external server or third-party service (browser-managed preference sync is not an extension transmission)
 - Use analytics, tracking, or telemetry of any kind
 - Collect login credentials, tokens, or session data
 - Store or cache any NetSuite record data beyond the current page view
@@ -36,7 +42,7 @@ This extension does **not**:
 | Permission | Purpose |
 |------------|---------|
 | `activeTab` | Interact with the current page when activated |
-| `storage` | Persist user preferences and Nav Manager configuration |
+| `storage` | Persist user preferences (display preferences roam via browser sync) and Nav Manager configuration |
 | `scripting` | Execute scripts in NetSuite tabs for data retrieval and menu extraction |
 | `optional_host_permissions: *.netsuite.com` | Requested on first Nav Manager use to auto-hide menus on page load |
 

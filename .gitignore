@@ -2,8 +2,8 @@
 .idea/
 *.zip
 *.svg
+!img/alien-tech.svg
 store/
 dist/
 build.sh
 CHANGELOG.md
-img/icon24.png

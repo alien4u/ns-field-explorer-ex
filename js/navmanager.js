@@ -12,8 +12,6 @@ const initNavManager = async () => {
 
     'use strict';
 
-    const browserAPI = (typeof browser !== 'undefined' && browser.runtime) ? browser : chrome;
-
     /* ──── DOM References ──── */
 
     const oNavBtn = document.getElementById('navManagerBtn');
@@ -36,31 +34,9 @@ const initNavManager = async () => {
 
     if (!oNavBtn || !oNavPanel) return;
 
-    const NETSUITE_ORIGIN = 'https://*.netsuite.com/*';
     const oPermissionGate = document.getElementById('navPermissionGate');
     const oNavContent = document.getElementById('navManagerContent');
     const oGrantBtn = document.getElementById('navGrantAccessBtn');
-
-    /**
-     * Registers the navhider content script dynamically if not already registered.
-     */
-    const ensureNavhiderRegistered = async () => {
-
-        try {
-
-            const aScripts = await browserAPI.scripting.getRegisteredContentScripts({ ids: ['fex-navhider'] });
-
-            if (aScripts.length > 0) return;
-
-            await browserAPI.scripting.registerContentScripts([{
-                id: 'fex-navhider',
-                matches: [NETSUITE_ORIGIN],
-                js: ['js/navhider.js'],
-                runAt: 'document_start'
-            }]);
-
-        } catch (_e) { /* ignore */ }
-    };
 
     /* ──── State ──── */
 
@@ -71,28 +47,23 @@ const initNavManager = async () => {
     /** @type {Map<string, {id: string, label: string}>} key → item info */
     let oHiddenAccount = new Map();
 
-    /* ──── Account ID Extraction ──── */
+    /* ──── Active Tab ──── */
 
     /**
-     * Extracts account ID from the active tab's URL.
+     * Reads the active tab and its parsed URL.
      *
-     * @returns {Promise<string>} account ID or empty string
+     * @returns {Promise<{oTab: Object|null, oUrl: URL|null}>}
      */
-    const getAccountIdFromTab = async () => {
+    const getActiveTab = async () => {
 
         try {
 
             const [oTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
 
-            if (!oTab?.url) return '';
+            return { oTab: oTab || null, oUrl: oTab?.url ? new URL(oTab.url) : null };
 
-            const oUrl = new URL(oTab.url);
-            const aMatch = oUrl.hostname.match(/^([^.]+)\.app\.netsuite\.com$/);
-
-            return aMatch ? aMatch[1] : '';
-
-        } catch (_pE) {
-            return '';
+        } catch (_e) {
+            return { oTab: null, oUrl: null };
         }
     };
 
@@ -105,9 +76,10 @@ const initNavManager = async () => {
 
         try {
 
-            const [oTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
+            const { oTab, oUrl } = await getActiveTab();
 
-            if (!oTab?.id) return [];
+            /* Never scrape a foreign page - its menus would be stored as NetSuite hide rules */
+            if (!oTab?.id || !oUrl || !isNetSuiteHostname(oUrl.hostname)) return [];
 
             const [oResult] = await browserAPI.scripting.executeScript({
                 target: { tabId: oTab.id },
@@ -153,7 +125,7 @@ const initNavManager = async () => {
 
                     /* Find nav containers */
                     const aContainers = document.querySelectorAll(
-                        'div[data-header-section="navigation"], div[role="group"], #uif66'
+                        'div[data-header-section="navigation"], div[role="group"]'
                     );
 
                     const aAllItems = [];
@@ -180,7 +152,7 @@ const initNavManager = async () => {
 
             return oResult?.result || [];
 
-        } catch (_pE) {
+        } catch (_e) {
             return [];
         }
     };
@@ -188,26 +160,7 @@ const initNavManager = async () => {
     /* ──── Storage ──── */
 
     /**
-     * Loads hidden menu IDs from storage.
-     */
-    const loadHiddenIds = async () => {
-
-        const aKeys = ['navHide_all'];
-
-        if (sAccountId) {
-            aKeys.push(`navHide_${sAccountId}`);
-        }
-
-        const oResult = await browserAPI.storage.local.get(aKeys);
-
-        oHiddenAll = arrayToMap(oResult['navHide_all'] || []);
-        oHiddenAccount = sAccountId
-            ? arrayToMap(oResult[`navHide_${sAccountId}`] || [])
-            : new Map();
-    };
-
-    /**
-     * Converts stored array (of objects or legacy strings) to a Map.
+     * Converts a stored array to a Map keyed by item key.
      *
      * @param {Array} pArr - stored array
      * @returns {Map<string, {id: string, label: string}>}
@@ -218,15 +171,28 @@ const initNavManager = async () => {
 
         pArr.forEach((pItem) => {
 
-            if (typeof pItem === 'string') {
-                /* Legacy format — treat as key with no metadata */
-                oMap.set(pItem, { id: pItem, label: '' });
-            } else if (pItem && pItem.key) {
-                oMap.set(pItem.key, { id: pItem.id || '', label: pItem.label || '' });
-            }
+            const oItem = normalizeHiddenItem(pItem);
+
+            if (oItem) oMap.set(oItem.key, { id: oItem.id, label: oItem.label });
         });
 
         return oMap;
+    };
+
+    /**
+     * Loads hidden menu IDs from storage.
+     */
+    const loadHiddenIds = async () => {
+
+        const sAccountKey = buildNavHideKey(sAccountId);
+        const aKeys = ['navHide_all'];
+
+        if (sAccountKey) aKeys.push(sAccountKey);
+
+        const oResult = await browserAPI.storage.local.get(aKeys);
+
+        oHiddenAll = arrayToMap(oResult['navHide_all'] || []);
+        oHiddenAccount = sAccountKey ? arrayToMap(oResult[sAccountKey] || []) : new Map();
     };
 
     /**
@@ -237,17 +203,239 @@ const initNavManager = async () => {
      */
     const saveHiddenIds = (pScope, pMap) => {
 
-        const sKey = pScope === 'all' ? 'navHide_all' : `navHide_${pScope}`;
+        const sKey = buildNavHideKey(pScope);
+
+        if (!sKey) return Promise.resolve();
 
         const aArr = [];
+
         pMap.forEach((pVal, pMapKey) => {
             aArr.push({ key: pMapKey, id: pVal.id, label: pVal.label });
         });
 
-        browserAPI.storage.local.set({ [sKey]: aArr });
+        return browserAPI.storage.local.set({ [sKey]: aArr });
+    };
+
+    /* Every rule mutation runs through this one chain. Snapshotting and mutating on the
+     * way in would let a second change start against shared state while the first write
+     * is still out, and a rollback would then restore a snapshot taken before a newer
+     * change that already succeeded. One queue covers both scopes, since the duplicate
+     * cleanup crosses from the global map to the account map. */
+    let oNavMutationQueue = Promise.resolve();
+
+    /**
+     * Applies a hide-rule change transactionally, after every earlier change has
+     * settled. The panel must not report a rule removed while the stored rule and the
+     * injected stylesheet are both still live, so a failed write puts the map back the
+     * way it was and says so.
+     *
+     * The initiating control is deliberately NOT disabled while the write is out: the
+     * queue already orders overlapping clicks, and disabling a focused control blurs it
+     * synchronously, which would rob the repaint of the focus it needs to restore.
+     *
+     * @param {Map} pMap - map being mutated
+     * @param {string} pScope - 'all' or account ID
+     * @param {Function} pMutate - applies the change to pMap
+     * @returns {Promise<boolean>} true when the write landed
+     */
+    const commitHiddenIds = (pMap, pScope, pMutate) => {
+
+        const oTask = oNavMutationQueue.then(async () => {
+
+            /* Snapshot and mutate only now that the queue has reached this task */
+            const oSnapshot = new Map(pMap);
+
+            try {
+
+                pMutate();
+                await saveHiddenIds(pScope, pMap);
+
+                return true;
+
+            } catch (pErr) {
+
+                console.warn('[FEX] nav rule save', pErr);
+
+                pMap.clear();
+                oSnapshot.forEach((pValue, pKey) => pMap.set(pKey, pValue));
+
+                renderScopeTrees();
+                updateStatusCount();
+                showNavError('Could not save changes - try again.');
+
+                return false;
+            }
+        });
+
+        /* The link must settle whatever the task did, or one failure wedges the queue */
+        oNavMutationQueue = oTask.catch(() => {});
+
+        return oTask;
     };
 
     /* ──── Tree Rendering ──── */
+
+    /* Which branches the user has opened, by item key. The trees are rebuilt from the
+     * maps on every save, search and rollback, so expansion cannot live in the DOM or it
+     * collapses on each repaint. Both scopes render the same scraped menu, so one set
+     * keeps them consistent with each other. */
+    const oExpandedKeys = new Set();
+
+    /**
+     * Collects every item key present in the scraped menu snapshot.
+     *
+     * @param {Array<Object>} pItems - menu tree
+     * @param {Set<string>} [pKeys] - accumulator
+     * @returns {Set<string>} keys present in the snapshot
+     */
+    const collectTreeKeys = (pItems, pKeys) => {
+
+        const oKeys = pKeys || new Set();
+
+        pItems.forEach((pItem) => {
+
+            const sKey = pItem.id || pItem.label || '';
+
+            if (sKey) oKeys.add(sKey);
+            if (pItem.children?.length) collectTreeKeys(pItem.children, oKeys);
+        });
+
+        return oKeys;
+    };
+
+    /**
+     * Builds the per-scope "Clear all" control. The first click arms it for
+     * three seconds, the second one executes.
+     *
+     * @param {Map} pHiddenMap - hidden items map for this scope
+     * @param {string} pScope - 'all' or account ID
+     * @returns {HTMLDivElement}
+     */
+    const buildClearAllBar = (pHiddenMap, pScope) => {
+
+        const oBar = document.createElement('div');
+        const oBtn = document.createElement('button');
+        const nCount = pHiddenMap.size;
+        const sIdle = `Clear all (${nCount})`;
+
+        let nConfirmTimer = 0;
+        let bArmed = false;
+
+        oBar.className = 'nav-scope-actions';
+        oBtn.className = 'nav-clear-btn';
+        oBtn.type = 'button';
+        oBtn.textContent = sIdle;
+
+        oBtn.addEventListener('click', async () => {
+
+            if (!bArmed) {
+
+                bArmed = true;
+                oBtn.textContent = `Confirm clear ${nCount}?`;
+                oBtn.classList.add('armed');
+
+                nConfirmTimer = setTimeout(() => {
+
+                    bArmed = false;
+                    oBtn.textContent = sIdle;
+                    oBtn.classList.remove('armed');
+                }, 3000);
+
+                return;
+            }
+
+            clearTimeout(nConfirmTimer);
+
+            const bSaved = await commitHiddenIds(pHiddenMap, pScope, () => pHiddenMap.clear());
+
+            if (!bSaved) return;
+
+            renderScopeTrees();
+            updateStatusCount();
+        });
+
+        oBar.appendChild(oBtn);
+
+        return oBar;
+    };
+
+    /**
+     * Appends the rules whose menu item is missing from the current snapshot.
+     * The snapshot only covers the page that was scraped, so these are listed
+     * rather than deleted - another account or page may still show them.
+     *
+     * @param {HTMLElement} pContainer - scope container
+     * @param {Map} pHiddenMap - hidden items map for this scope
+     * @param {string} pScope - 'all' or account ID
+     * @param {Set<string>} pTreeKeys - keys present in the snapshot
+     */
+    const appendOrphanSection = (pContainer, pHiddenMap, pScope, pTreeKeys) => {
+
+        const aOrphans = [];
+
+        pHiddenMap.forEach((pValue, pKey) => {
+
+            if (!pTreeKeys.has(pKey)) aOrphans.push({ key: pKey, label: pValue.label });
+        });
+
+        if (aOrphans.length === 0) return;
+
+        const oSection = document.createElement('div');
+        const oHeader = document.createElement('div');
+        const oToggle = document.createElement('span');
+        const oTitle = document.createElement('span');
+        const oNote = document.createElement('div');
+        const oList = document.createElement('div');
+
+        oSection.className = 'nav-orphans collapsed';
+
+        oHeader.className = 'nav-orphans-header';
+        oToggle.className = 'nav-orphans-toggle';
+        oToggle.textContent = '▼';
+        oTitle.textContent = `Not in current menu (${aOrphans.length})`;
+        oHeader.appendChild(oToggle);
+        oHeader.appendChild(oTitle);
+        oHeader.addEventListener('click', () => oSection.classList.toggle('collapsed'));
+
+        oNote.className = 'nav-orphans-note';
+        oNote.textContent = 'Hidden by a rule but absent from the menu scanned on this page.';
+
+        oList.className = 'nav-orphans-list';
+        oList.appendChild(oNote);
+
+        aOrphans.forEach((pOrphan) => {
+
+            const oRow = document.createElement('div');
+            const oLabel = document.createElement('span');
+            const oUnhide = document.createElement('button');
+
+            oRow.className = 'nav-orphan-row';
+            oLabel.className = 'nav-orphan-label';
+            oLabel.textContent = pOrphan.label || pOrphan.key;
+            oLabel.title = pOrphan.key;
+
+            oUnhide.className = 'nav-orphan-btn';
+            oUnhide.type = 'button';
+            oUnhide.textContent = 'Unhide';
+            oUnhide.addEventListener('click', async () => {
+
+                const bSaved = await commitHiddenIds(pHiddenMap, pScope, () => pHiddenMap.delete(pOrphan.key));
+
+                if (!bSaved) return;
+
+                renderScopeTrees();
+                updateStatusCount();
+            });
+
+            oRow.appendChild(oLabel);
+            oRow.appendChild(oUnhide);
+            oList.appendChild(oRow);
+        });
+
+        oSection.appendChild(oHeader);
+        oSection.appendChild(oList);
+        pContainer.appendChild(oSection);
+    };
 
     /**
      * Renders a menu tree into a target container element.
@@ -261,19 +449,44 @@ const initNavManager = async () => {
      */
     const renderTree = (pContainer, pItems, pHiddenMap, pScope, pSearchTerm, pGlobalMap) => {
 
+        const aItems = pItems || [];
+
+        /* Every repaint replaces the nodes, so a keyboard user loses the checkbox they
+         * were on. Note which one it was before the container is emptied. */
+        const oFocused = document.activeElement;
+        const sFocusPath = (oFocused
+            && oFocused.classList
+            && oFocused.classList.contains('nav-tree-cb')
+            && pContainer.contains(oFocused))
+            ? (oFocused.dataset.fexPath || '')
+            : '';
+
         pContainer.textContent = '';
 
-        if (!pItems || pItems.length === 0) {
+        if (pHiddenMap.size > 0) {
+            pContainer.appendChild(buildClearAllBar(pHiddenMap, pScope));
+        }
+
+        if (aItems.length === 0) {
 
             const oEmpty = document.createElement('div');
+
             oEmpty.className = 'nav-empty';
             oEmpty.textContent = 'No menu items found. Make sure you are on a NetSuite page.';
             pContainer.appendChild(oEmpty);
-            return;
+
+        } else {
+
+            pContainer.appendChild(buildTreeUl(aItems, pHiddenMap, pScope, pSearchTerm, 0, pGlobalMap, ''));
         }
 
-        const oUl = buildTreeUl(pItems, pHiddenMap, pScope, pSearchTerm, 0, pGlobalMap);
-        pContainer.appendChild(oUl);
+        appendOrphanSection(pContainer, pHiddenMap, pScope, collectTreeKeys(aItems));
+
+        if (!sFocusPath) return;
+
+        const oReplacement = pContainer.querySelector(`.nav-tree-cb[data-fex-path="${CSS.escape(sFocusPath)}"]`);
+
+        if (oReplacement) oReplacement.focus();
     };
 
     /**
@@ -285,9 +498,10 @@ const initNavManager = async () => {
      * @param {string} pSearchTerm - search filter
      * @param {number} pDepth - nesting depth
      * @param {Map|null} pGlobalMap - global hidden map (null = this IS the global tree)
+     * @param {string} pParentPath - render path of the parent item, '' at the root
      * @returns {HTMLUListElement}
      */
-    const buildTreeUl = (pItems, pHiddenMap, pScope, pSearchTerm, pDepth, pGlobalMap) => {
+    const buildTreeUl = (pItems, pHiddenMap, pScope, pSearchTerm, pDepth, pGlobalMap, pParentPath) => {
 
         const oUl = document.createElement('ul');
         oUl.className = 'nav-tree';
@@ -296,7 +510,13 @@ const initNavManager = async () => {
             oUl.classList.add('nav-tree-nested');
         }
 
-        pItems.forEach((pItem) => {
+        pItems.forEach((pItem, pIndex) => {
+
+            /* Position in the scraped tree, not the item key: the extractor dedups only
+             * top-level entries per container, so one key can render more than once and
+             * a key would point focus at the wrong occurrence. The index is taken before
+             * the search filter, so a path means the same item in a filtered render. */
+            const sItemPath = pParentPath ? `${pParentPath}.${pIndex}` : String(pIndex);
 
             /* Filter by search term */
             if (pSearchTerm && !matchesSearch(pItem, pSearchTerm)) return;
@@ -310,16 +530,33 @@ const initNavManager = async () => {
             const oRow = document.createElement('div');
             oRow.className = 'nav-tree-row';
 
+            /* Checkbox — use automation ID, fall back to label */
+            const sItemKey = pItem.id || pItem.label || '';
+
             if (bHasChildren) {
 
                 const oToggle = document.createElement('span');
+                const bExpanded = oExpandedKeys.has(sItemKey);
+
                 oToggle.className = 'nav-tree-toggle';
-                oToggle.textContent = '▶';
+                oToggle.textContent = bExpanded ? '▼' : '▶';
+
+                if (bExpanded) oLi.classList.add('expanded');
+
                 oToggle.addEventListener('click', () => {
 
-                    oLi.classList.toggle('expanded');
-                    oToggle.textContent = oLi.classList.contains('expanded') ? '▼' : '▶';
+                    const bNowExpanded = !oExpandedKeys.has(sItemKey);
+
+                    if (bNowExpanded) {
+                        oExpandedKeys.add(sItemKey);
+                    } else {
+                        oExpandedKeys.delete(sItemKey);
+                    }
+
+                    oLi.classList.toggle('expanded', bNowExpanded);
+                    oToggle.textContent = bNowExpanded ? '▼' : '▶';
                 });
+
                 oRow.appendChild(oToggle);
 
             } else {
@@ -329,15 +566,13 @@ const initNavManager = async () => {
                 oRow.appendChild(oSpacer);
             }
 
-            /* Checkbox — use automation ID, fall back to label */
-            const sItemKey = pItem.id || pItem.label || '';
-
             /* Check if this item is globally hidden (only relevant for account tree) */
             const bGloballyHidden = pGlobalMap ? pGlobalMap.has(sItemKey) : false;
 
             const oCb = document.createElement('input');
             oCb.type = 'checkbox';
             oCb.className = 'nav-tree-cb';
+            oCb.dataset.fexPath = sItemPath;
 
             if (bGloballyHidden) {
                 /* Item is hidden by All Instances — show as checked + disabled */
@@ -354,26 +589,37 @@ const initNavManager = async () => {
                 pEvent.stopPropagation();
             });
 
-            oCb.addEventListener('change', (pEvent) => {
+            oCb.addEventListener('change', async (pEvent) => {
 
                 pEvent.stopPropagation();
 
                 if (!sItemKey) return;
 
-                if (oCb.checked) {
-                    pHiddenMap.set(sItemKey, { id: pItem.id, label: pItem.label });
-                } else {
-                    pHiddenMap.delete(sItemKey);
-                }
+                const bChecked = oCb.checked;
 
-                saveHiddenIds(pScope, pHiddenMap);
+                /* A failed write re-renders from the restored map, which puts the
+                 * checkbox back on its own */
+                const bSaved = await commitHiddenIds(pHiddenMap, pScope, () => {
 
-                /* If checking in All Instances, clean up account duplicates + re-render account tree */
+                    if (bChecked) {
+                        pHiddenMap.set(sItemKey, { id: pItem.id, label: pItem.label });
+                    } else {
+                        pHiddenMap.delete(sItemKey);
+                    }
+                });
+
+                if (!bSaved) return;
+
+                /* Checking in All Instances also drops any duplicate account rule */
                 if (!pGlobalMap) {
-                    cleanupAccountDuplicates(sItemKey, oCb.checked);
-                    renderAccountTree();
+                    await cleanupAccountDuplicates(sItemKey, bChecked);
                 }
 
+                /* Re-render on success as well. An earlier task's rollback may have
+                 * rebuilt the trees while this one was queued, leaving this handler
+                 * holding a detached checkbox whose live replacement still shows the
+                 * pre-change state. Both outcomes now repaint from the maps. */
+                renderScopeTrees();
                 updateStatusCount();
             });
 
@@ -418,7 +664,7 @@ const initNavManager = async () => {
             /* Render children */
             if (bHasChildren) {
 
-                const oChildUl = buildTreeUl(pItem.children, pHiddenMap, pScope, pSearchTerm, pDepth + 1, pGlobalMap);
+                const oChildUl = buildTreeUl(pItem.children, pHiddenMap, pScope, pSearchTerm, pDepth + 1, pGlobalMap, sItemPath);
                 oLi.appendChild(oChildUl);
             }
 
@@ -435,14 +681,26 @@ const initNavManager = async () => {
      * @param {string} pKey - item key
      * @param {boolean} pAdded - true if added to global, false if removed
      */
-    const cleanupAccountDuplicates = (pKey, pAdded) => {
+    const cleanupAccountDuplicates = async (pKey, pAdded) => {
 
-        if (!pAdded || !sAccountId) return;
+        if (!pAdded || !sAccountId || !oHiddenAccount.has(pKey)) return;
 
-        if (oHiddenAccount.has(pKey)) {
-            oHiddenAccount.delete(pKey);
-            saveHiddenIds(sAccountId, oHiddenAccount);
-        }
+        await commitHiddenIds(oHiddenAccount, sAccountId, () => oHiddenAccount.delete(pKey));
+    };
+
+    /**
+     * Replaces the account tree with a hint when no account could be detected.
+     * Rules saved under an empty scope would land in a key no reader loads.
+     */
+    const renderAccountHint = () => {
+
+        oNavTreeAccount.textContent = '';
+
+        const oHint = document.createElement('div');
+
+        oHint.className = 'nav-empty';
+        oHint.textContent = 'Open a NetSuite account page to manage per-account rules';
+        oNavTreeAccount.appendChild(oHint);
     };
 
     /**
@@ -450,8 +708,25 @@ const initNavManager = async () => {
      */
     const renderAccountTree = () => {
 
+        if (!sAccountId) {
+            renderAccountHint();
+            return;
+        }
+
         const sTerm = (oNavSearch?.value || '').toLowerCase();
+
         renderTree(oNavTreeAccount, aMenuTree, oHiddenAccount, sAccountId, sTerm, oHiddenAll);
+    };
+
+    /**
+     * Re-renders both scope trees against the current search term.
+     */
+    const renderScopeTrees = () => {
+
+        const sTerm = (oNavSearch?.value || '').toLowerCase();
+
+        renderTree(oNavTreeAll, aMenuTree, oHiddenAll, 'all', sTerm, null);
+        renderAccountTree();
     };
 
     /**
@@ -494,6 +769,107 @@ const initNavManager = async () => {
             : 'No menu items hidden';
     };
 
+    /* ──── Registration Status ──── */
+
+    /* One retry at a time. ensureNavhiderRegistered reads the current registration and
+     * then writes, and those steps are not atomic: two concurrent calls from the absent
+     * state both see "absent", both register, and the loser takes Chrome's duplicate-id
+     * rejection and reports 'failed' even though the registration landed. Absent is
+     * exactly the state a user retries from, so the race is reachable. */
+    let bRetryInFlight = false;
+
+    /**
+     * Surfaces a failed rule write, using the registration warning's placement.
+     *
+     * @param {string} pMessage - message to show
+     */
+    const showNavError = (pMessage) => {
+
+        const oExisting = document.getElementById('navSaveError');
+
+        if (oExisting) oExisting.remove();
+
+        const oStrip = document.createElement('div');
+        const oText = document.createElement('span');
+        const oDismiss = document.createElement('button');
+
+        oStrip.id = 'navSaveError';
+        oStrip.className = 'nav-reg-warning';
+        oText.textContent = pMessage;
+
+        oDismiss.className = 'nav-reg-btn';
+        oDismiss.type = 'button';
+        oDismiss.textContent = 'Dismiss';
+        oDismiss.addEventListener('click', () => oStrip.remove());
+
+        oStrip.appendChild(oText);
+        oStrip.appendChild(oDismiss);
+        oNavPanel.insertBefore(oStrip, oNavContent);
+    };
+
+    /**
+     * Surfaces a failed content-script registration. Rule editing still works,
+     * but nothing would apply the rules on page load, so say so.
+     *
+     * @param {string} pStatus - ensureNavhiderRegistered() result
+     */
+    const applyRegistrationStatus = (pStatus) => {
+
+        const oExisting = document.getElementById('navRegWarning');
+
+        if (pStatus !== 'failed') {
+
+            if (oExisting) oExisting.remove();
+            return;
+        }
+
+        if (oExisting) return;
+
+        const oStrip = document.createElement('div');
+        const oText = document.createElement('span');
+        const oRetry = document.createElement('button');
+        const oDismiss = document.createElement('button');
+
+        oStrip.id = 'navRegWarning';
+        oStrip.className = 'nav-reg-warning';
+
+        oText.textContent = 'Automatic menu hiding may not be active.';
+
+        oRetry.className = 'nav-reg-btn';
+        oRetry.type = 'button';
+        oRetry.textContent = 'Retry';
+        oRetry.addEventListener('click', async () => {
+
+            /* Feedback through the label, not .disabled: disabling a focused control blurs
+             * it synchronously. Re-entry is held off by the guard instead. */
+            if (bRetryInFlight) return;
+
+            bRetryInFlight = true;
+            oRetry.textContent = 'Retrying...';
+
+            try {
+
+                const sStatus = await ensureNavhiderRegistered();
+
+                oRetry.textContent = 'Retry';
+                applyRegistrationStatus(sStatus);
+
+            } finally {
+                bRetryInFlight = false;
+            }
+        });
+
+        oDismiss.className = 'nav-reg-btn';
+        oDismiss.type = 'button';
+        oDismiss.textContent = 'Dismiss';
+        oDismiss.addEventListener('click', () => oStrip.remove());
+
+        oStrip.appendChild(oText);
+        oStrip.appendChild(oRetry);
+        oStrip.appendChild(oDismiss);
+        oNavPanel.insertBefore(oStrip, oNavContent);
+    };
+
     /* ──── Panel Toggle ──── */
 
     /**
@@ -508,6 +884,8 @@ const initNavManager = async () => {
         if (oContainer) oContainer.style.display = 'none';
         if (oLegacyContainer) oLegacyContainer.style.display = 'none';
         if (oFooter) oFooter.style.display = 'none';
+
+        if (window.fex) window.fex.navOpen = true;
 
         oNavPanel.classList.add('visible');
     };
@@ -531,34 +909,35 @@ const initNavManager = async () => {
         oPermissionGate.classList.remove('visible');
         oNavContent.classList.remove('hidden');
 
-        /* Load data */
-        sAccountId = await getAccountIdFromTab();
+        const { oUrl } = await getActiveTab();
+
+        sAccountId = oUrl ? getAccountIdFromHostname(oUrl.hostname) : '';
+
         await loadHiddenIds();
 
-        /* Update account label */
         if (oNavAccountLabel) {
             oNavAccountLabel.textContent = sAccountId
                 ? `Account: ${sAccountId}`
                 : 'Account: (not detected)';
         }
 
-        /* Extract menu tree */
         const fnLoadingMsg = (pContainer) => {
+
             pContainer.textContent = '';
+
             const oDiv = document.createElement('div');
+
             oDiv.className = 'nav-loading';
             oDiv.textContent = '⏳ Scanning navigation menu...';
             pContainer.appendChild(oDiv);
         };
+
         fnLoadingMsg(oNavTreeAll);
         fnLoadingMsg(oNavTreeAccount);
 
         aMenuTree = await extractMenuTree();
 
-        /* Render trees — account tree gets global map for overlap detection */
-        renderTree(oNavTreeAll, aMenuTree, oHiddenAll, 'all', '', null);
-        renderTree(oNavTreeAccount, aMenuTree, oHiddenAccount, sAccountId, '', oHiddenAll);
-
+        renderScopeTrees();
         updateStatusCount();
 
         if (oNavSearch) oNavSearch.focus();
@@ -572,17 +951,17 @@ const initNavManager = async () => {
 
         oNavPanel.classList.remove('visible');
 
+        if (window.fex) window.fex.navOpen = false;
+
         /* Always restore header, search, filter bar, footer */
         if (oHeader) oHeader.style.display = '';
         if (oFilterBar) oFilterBar.style.display = '';
         if (oSearchWrap) oSearchWrap.style.display = '';
         if (oFooter) oFooter.style.display = '';
 
-        /* Restore view — fexRenderIfReady handles record pages,
-         * applyViewMode handles non-record pages (via sNonRecordMsg) */
-        if (typeof window.fexRenderIfReady === 'function') {
-            window.fexRenderIfReady();
-        }
+        /* renderIfReady handles record pages, and falls through to applyViewMode
+         * for non-record pages so their message comes back */
+        window.fex?.renderIfReady();
     };
 
     /* ──── Event Listeners ──── */
@@ -590,27 +969,32 @@ const initNavManager = async () => {
     oNavBtn.addEventListener('click', async () => {
 
         const bHasPermission = await browserAPI.permissions.contains({
-            origins: [NETSUITE_ORIGIN]
+            origins: [FEX_NETSUITE_ORIGIN]
         });
 
-        if (bHasPermission) {
-            await ensureNavhiderRegistered();
-            await showPanel();
-        } else {
+        if (!bHasPermission) {
             showPermissionGate();
+            return;
         }
+
+        const sStatus = await ensureNavhiderRegistered();
+
+        await showPanel();
+        applyRegistrationStatus(sStatus);
     });
 
     oGrantBtn.addEventListener('click', async () => {
 
         const bGranted = await browserAPI.permissions.request({
-            origins: [NETSUITE_ORIGIN]
+            origins: [FEX_NETSUITE_ORIGIN]
         });
 
         if (!bGranted) return;
 
-        await ensureNavhiderRegistered();
+        const sStatus = await ensureNavhiderRegistered();
+
         await showPanel();
+        applyRegistrationStatus(sStatus);
     });
 
     oNavBack.addEventListener('click', hidePanel);
@@ -631,17 +1015,10 @@ const initNavManager = async () => {
         });
     });
 
-    oNavSearch?.addEventListener('input', () => {
-
-        const sTerm = (oNavSearch.value || '').toLowerCase();
-
-        renderTree(oNavTreeAll, aMenuTree, oHiddenAll, 'all', sTerm, null);
-        renderTree(oNavTreeAccount, aMenuTree, oHiddenAccount, sAccountId, sTerm, oHiddenAll);
-    });
+    oNavSearch?.addEventListener('input', fexDebounce(renderScopeTrees, 150));
 };
 
-/* Initialize when DOM is ready */
 document.addEventListener('DOMContentLoaded', () => {
 
-    initNavManager();
+    initNavManager().catch((pErr) => console.warn('[FEX] nav manager', pErr));
 });

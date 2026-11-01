@@ -34,10 +34,13 @@
     --fe-shadow-hover: 0 2px 6px rgba(36, 56, 91, 0.14);
     --fe-transition: 0.15s ease;
     --fe-width: 550px;
+    --fe-height: 592px;
+    color-scheme: light;
 }
 
 /* -- Dark Mode Tokens -- */
-body.theme-dark {
+:root.theme-dark {
+    color-scheme: dark;
     --fe-primary: #64b5f6;
     --fe-primary-hover: #90caf9;
     --fe-primary-light: #5c8abf;
@@ -66,15 +69,24 @@ body.theme-dark {
     box-sizing: border-box;
 }
 
-body, html {
+html, body {
     margin: 0;
     padding: 0;
+    overflow: hidden;
+}
+
+/* The root tracks the size vars too, not just body: Chrome sizes the popup window from
+ * the document root, so a root that never lays out smaller than the current viewport gives
+ * the sizing algorithm grow signals but never a shrink signal, and the drag cannot contract. */
+html {
+    width: var(--fe-width);
+    height: var(--fe-height);
+    background: var(--fe-bg);
 }
 
 body {
-    width: var(--fe-width);
-    height: 600px;
-    overflow: auto;
+    width: 100%;
+    height: 100%;
     font-family: var(--fe-font);
     font-size: 13px;
     background: var(--fe-bg);
@@ -267,7 +279,7 @@ a:hover {
     box-shadow: 0 0 0 2px rgba(36, 56, 91, 0.15);
 }
 
-body.theme-dark #searchBox:focus {
+:root.theme-dark #searchBox:focus {
     box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.2);
 }
 
@@ -313,12 +325,18 @@ body.theme-dark #searchBox:focus {
 }
 
 .tab-panel.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
 }
 
 #container {
+    display: flex;
+    flex-direction: column;
     flex: 1;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     padding: 0;
 }
 
@@ -328,16 +346,28 @@ body.theme-dark #searchBox:focus {
 #legacyContainer {
     position: relative;
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 12px;
     background: #000;
 }
 
-.fe-copy-float {
-    position: absolute;
-    top: 8px;
-    right: 12px;
+/* Zero-height sticky rail: the copy button floats over the panel and stays put while it scrolls */
+.fe-copy-bar {
+    position: sticky;
+    top: 0;
+    height: 0;
+    overflow: visible;
+    display: flex;
+    justify-content: flex-end;
+    /* the bar is deliberately 0-height; without this the default stretch flattens the
+     * button to 0px instead of letting it keep its intrinsic height */
+    align-items: flex-start;
     z-index: 5;
+}
+
+.fe-copy-float {
+    margin: 8px 12px 0 0;
     display: inline-flex;
     align-items: center;
     gap: 3px;
@@ -384,7 +414,10 @@ body.theme-dark #searchBox:focus {
  * Tables
  * =============================================== */
 .table-wrap {
-    overflow-x: auto;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
 }
 
 table {
@@ -411,6 +444,12 @@ thead th {
 
 thead th:hover {
     color: var(--fe-primary);
+}
+
+thead th:focus-visible {
+    color: var(--fe-primary);
+    outline: 2px solid var(--fe-primary);
+    outline-offset: -2px;
 }
 
 tbody tr {
@@ -473,14 +512,32 @@ tbody td {
     background: var(--fe-bg-card-alt);
 }
 
+.clickable:focus-visible {
+    background: var(--fe-bg-card-alt);
+    outline: 2px solid var(--fe-primary);
+    outline-offset: 1px;
+}
+
 .copied {
     background: var(--fe-copied-bg) !important;
     color: var(--fe-copied-text) !important;
 }
 
+.copy-error {
+    background: var(--fe-error) !important;
+    color: #fff !important;
+}
+
 /* ===============================================
  * Sublist Panel
  * =============================================== */
+#sublistContainer {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
 .sublist-picker {
     padding: 10px 14px;
     display: flex;
@@ -488,6 +545,29 @@ tbody td {
     gap: 8px;
     background: var(--fe-bg-card);
     border-bottom: 1px solid var(--fe-border-light);
+    flex-shrink: 0;
+}
+
+.fe-mini-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-family: var(--fe-font);
+    font-weight: 600;
+    color: var(--fe-text-link);
+    background: var(--fe-bg-card);
+    border: 1px solid var(--fe-border);
+    border-radius: var(--fe-radius-sm);
+    cursor: pointer;
+    transition: border-color var(--fe-transition), color var(--fe-transition);
+}
+
+.fe-mini-btn:hover {
+    border-color: var(--fe-primary);
+    color: var(--fe-text-link-hover);
 }
 
 .sublist-picker label {
@@ -513,6 +593,9 @@ tbody td {
 }
 
 .sublist-header th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     background: var(--fe-bg-section);
     font-weight: 700;
     font-size: 11px;
@@ -551,16 +634,17 @@ tbody td {
  * =============================================== */
 #rawJsonContainer {
     position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
     padding: 10px;
 }
 
 .fe-copy-float-raw {
-    top: 16px;
-    right: 18px;
     background: rgba(50, 50, 50, 0.85);
 }
 
-body.theme-dark .fe-copy-float-raw {
+:root.theme-dark .fe-copy-float-raw {
     background: rgba(30, 30, 30, 0.85);
 }
 
@@ -679,10 +763,12 @@ mark {
     vertical-align: middle;
 }
 
+/* Padded clear of the resize grip parked in the bottom-left corner */
 .fe-sponsor-text {
     text-align: center;
     font-size: 10px;
     color: var(--fe-text-muted);
+    padding: 0 22px;
 }
 
 .fe-sponsor-text a {
@@ -693,107 +779,112 @@ mark {
 /* ===============================================
  * Compact Mode (.fe-compact)
  * =============================================== */
-body.fe-compact {
+:root.fe-compact body {
     font-size: 11px;
 }
 
-body.fe-compact .fe-toolbar-row {
+:root.fe-compact .fe-toolbar {
     padding: 5px 10px;
 }
 
-body.fe-compact .fe-toolbar-title {
+:root.fe-compact .fe-toolbar-title {
     font-size: 12px;
 }
 
-body.fe-compact .fe-icon-btn {
+:root.fe-compact .fe-icon-btn {
     width: 24px;
     height: 24px;
 }
 
-body.fe-compact .fe-icon-btn .fe-icon {
+:root.fe-compact .fe-icon-btn .fe-icon {
     width: 13px;
     height: 13px;
 }
 
-body.fe-compact .fe-filter-bar {
+:root.fe-compact .fe-filter-bar {
     padding: 4px 10px;
     gap: 1px;
 }
 
-body.fe-compact .fe-filter-label {
+:root.fe-compact .fe-filter-label {
     font-size: 10px;
 }
 
-body.fe-compact .fe-select {
+:root.fe-compact .fe-select {
     font-size: 10px;
     padding: 2px 4px;
 }
 
-body.fe-compact .fe-search-wrap {
+:root.fe-compact .fe-search-wrap {
     padding: 5px 10px;
 }
 
-body.fe-compact #searchBox {
+:root.fe-compact #searchBox {
     padding: 5px 8px;
     font-size: 11px;
 }
 
-body.fe-compact .tab-btn {
+:root.fe-compact .tab-btn {
     padding: 5px 12px;
     font-size: 11px;
 }
 
-body.fe-compact thead th {
+:root.fe-compact thead th {
     padding: 4px 8px;
     font-size: 10px;
 }
 
-body.fe-compact tbody td {
+:root.fe-compact tbody td {
     padding: 3px 8px;
     font-size: 11px;
 }
 
-body.fe-compact .sublist-picker {
+:root.fe-compact .sublist-picker {
     padding: 6px 10px;
 }
 
-body.fe-compact #sublistTableOuter td {
+:root.fe-compact .fe-mini-btn {
+    padding: 3px 7px;
+    font-size: 10px;
+}
+
+:root.fe-compact #sublistTableOuter td {
     padding: 2px 6px;
     font-size: 10px;
 }
 
-body.fe-compact .raw-json {
+:root.fe-compact .raw-json {
     font-size: 10px;
     padding: 8px;
 }
 
-body.fe-compact .fe-footer {
+:root.fe-compact .fe-footer {
     padding: 2px 0;
 }
 
-body.fe-compact .fe-footer-text {
+:root.fe-compact .fe-footer-text {
     font-size: 9px;
 }
 
-body.fe-compact .fe-footer-links a {
+:root.fe-compact .fe-footer-links a {
     font-size: 10px;
 }
 
-body.fe-compact #legacyContainer {
+:root.fe-compact #legacyContainer {
     font-size: 11px;
 }
 
-body.fe-compact #legacyContainer .json-formatter-row {
+:root.fe-compact #legacyContainer .json-formatter-row {
     font-size: 11px;
     line-height: 1.3;
 }
 
-body.fe-compact #legacyContainer .json-formatter-key,
-body.fe-compact #legacyContainer .json-formatter-string,
-body.fe-compact #legacyContainer .json-formatter-number,
-body.fe-compact #legacyContainer .json-formatter-boolean,
-body.fe-compact #legacyContainer .json-formatter-null,
-body.fe-compact #legacyContainer .json-formatter-undefined {
+:root.fe-compact #legacyContainer .json-formatter-key,
+:root.fe-compact #legacyContainer .json-formatter-string,
+:root.fe-compact #legacyContainer .json-formatter-number,
+:root.fe-compact #legacyContainer .json-formatter-boolean,
+:root.fe-compact #legacyContainer .json-formatter-null,
+:root.fe-compact #legacyContainer .json-formatter-undefined {
     font-size: 11px;
 }
 
@@ -805,7 +896,8 @@ body.fe-compact #legacyContainer .json-formatter-undefined {
 #navManagerPanel {
     display: none;
     flex-direction: column;
-    height: 100vh;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -1187,18 +1279,122 @@ body.fe-compact #legacyContainer .json-formatter-undefined {
     color: var(--fe-text-muted);
 }
 
+/* -- Nav Scope Actions / Orphaned Rules -- */
+.nav-scope-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 4px 12px;
+}
+
+.nav-clear-btn,
+.nav-orphan-btn,
+.nav-reg-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--fe-font);
+    color: var(--fe-text-link);
+    background: var(--fe-bg-card);
+    border: 1px solid var(--fe-border);
+    border-radius: var(--fe-radius-sm);
+    cursor: pointer;
+    transition: border-color var(--fe-transition), color var(--fe-transition);
+}
+
+.nav-clear-btn:hover,
+.nav-orphan-btn:hover,
+.nav-reg-btn:hover {
+    border-color: var(--fe-primary);
+}
+
+.nav-clear-btn.armed {
+    color: #fff;
+    background: var(--fe-error);
+    border-color: var(--fe-error);
+}
+
+.nav-orphans {
+    border-top: 1px dashed var(--fe-border);
+    margin-top: 4px;
+}
+
+.nav-orphans-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fe-text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.nav-orphans.collapsed .nav-orphans-list {
+    display: none;
+}
+
+.nav-orphans.collapsed .nav-orphans-toggle {
+    transform: rotate(-90deg);
+}
+
+.nav-orphans-toggle {
+    font-size: 9px;
+    width: 12px;
+    text-align: center;
+    transition: transform var(--fe-transition);
+}
+
+.nav-orphans-note {
+    padding: 0 12px 4px 30px;
+    font-size: 10px;
+    color: var(--fe-text-muted);
+}
+
+.nav-orphan-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px 3px 30px;
+    font-size: 11px;
+}
+
+.nav-orphan-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--fe-text-muted);
+}
+
+/* -- Nav Registration Warning Strip -- */
+.nav-reg-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--fe-text);
+    background: var(--fe-bg-card-alt);
+    border-bottom: 1px solid var(--fe-error);
+    flex-shrink: 0;
+}
+
+.nav-reg-warning span {
+    flex: 1;
+}
+
 /* -- Compact Mode: Nav Manager -- */
-body.fe-compact .nav-tree-row {
+:root.fe-compact .nav-tree-row {
     padding: 2px 10px;
     font-size: 11px;
 }
 
-body.fe-compact .nav-section-header {
+:root.fe-compact .nav-section-header {
     padding: 5px 10px;
     font-size: 12px;
 }
 
-body.fe-compact .nav-manager-header h2 {
+:root.fe-compact .nav-manager-header h2 {
     font-size: 13px;
 }
 

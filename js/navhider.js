@@ -8,7 +8,7 @@
  * Storage format (per key):
  *   Array of { key, id, label } objects
  *   - id = data-automation-id (primary selector)
- *   - label = aria-label (fallback selector)
+ *   - label = aria-label (used only when no id was captured)
  *
  * @module navhider
  */
@@ -19,45 +19,24 @@
 
     const STYLE_ID = 'fex-navhider-style';
 
-    const browserAPI = (typeof browser !== 'undefined' && browser.runtime) ? browser : chrome;
-
     /**
-     * Extracts the NetSuite account ID from the current hostname.
-     *
-     * @returns {string} account ID or empty string
-     */
-    const getAccountId = () => {
-
-        const sHost = window.location.hostname;
-        const aMatch = sHost.match(/^([^.]+)\.app\.netsuite\.com$/);
-
-        return aMatch ? aMatch[1] : '';
-    };
-
-    /**
-     * Builds CSS selectors for a hidden item using all available identifiers.
-     * Mirrors the Stylus approach: data-automation-id primary, aria-label fallback.
+     * Builds the CSS selector for a hidden item. The automation id is unique per
+     * menu entry; the label is a last resort and matches every entry sharing it.
      *
      * @param {Object} pItem - { key, id, label }
-     * @returns {Array<string>} array of CSS selectors
+     * @returns {string} CSS selector, or empty string when the item has neither
      */
-    const buildSelectors = (pItem) => {
-
-        const aSelectors = [];
+    const buildSelector = (pItem) => {
 
         if (pItem.id) {
-            aSelectors.push(
-                `[role="menuitem"]:has(> a[data-automation-id="${CSS.escape(pItem.id)}"])`
-            );
+            return `[role="menuitem"]:has(> a[data-automation-id="${CSS.escape(pItem.id)}"])`;
         }
 
         if (pItem.label) {
-            aSelectors.push(
-                `[role="menuitem"]:has(> a[aria-label="${CSS.escape(pItem.label)}"])`
-            );
+            return `[role="menuitem"]:has(> a[aria-label="${CSS.escape(pItem.label)}"])`;
         }
 
-        return aSelectors;
+        return '';
     };
 
     /**
@@ -68,23 +47,13 @@
     const injectStyles = (pItems) => {
 
         let oStyle = document.getElementById(STYLE_ID);
-
-        if (!pItems || pItems.length === 0) {
-
-            if (oStyle) oStyle.remove();
-            return;
-        }
-
         const aAllSelectors = [];
 
         pItems.forEach((pItem) => {
 
-            /* Normalize: handle legacy string format */
-            const oItem = (typeof pItem === 'string')
-                ? { key: pItem, id: pItem, label: '' }
-                : pItem;
+            const sSelector = buildSelector(pItem);
 
-            buildSelectors(oItem).forEach((pSel) => aAllSelectors.push(pSel));
+            if (sSelector) aAllSelectors.push(sSelector);
         });
 
         if (aAllSelectors.length === 0) {
@@ -109,37 +78,33 @@
      */
     const applyHiddenMenus = () => {
 
-        const sAccountId = getAccountId();
+        const sAccountKey = buildNavHideKey(getAccountIdFromHostname(window.location.hostname));
         const aKeys = ['navHide_all'];
 
-        if (sAccountId) {
-            aKeys.push(`navHide_${sAccountId}`);
-        }
+        if (sAccountKey) aKeys.push(sAccountKey);
 
-        browserAPI.storage.local.get(aKeys).then((oResult) => {
+        browserAPI.storage.local.get(aKeys).then((pResult) => {
 
-            const aAllItems = oResult['navHide_all'] || [];
-            const aAccountItems = sAccountId ? (oResult[`navHide_${sAccountId}`] || []) : [];
-
-            /* Merge and deduplicate by key */
             const oSeen = new Set();
             const aMerged = [];
 
-            [...aAllItems, ...aAccountItems].forEach((pItem) => {
+            aKeys.forEach((pStorageKey) => {
 
-                const sKey = (typeof pItem === 'string') ? pItem : (pItem.key || '');
+                (pResult[pStorageKey] || []).forEach((pItem) => {
 
-                if (sKey && !oSeen.has(sKey)) {
-                    oSeen.add(sKey);
-                    aMerged.push(pItem);
-                }
+                    const oItem = normalizeHiddenItem(pItem);
+
+                    if (!oItem || oSeen.has(oItem.key)) return;
+
+                    oSeen.add(oItem.key);
+                    aMerged.push(oItem);
+                });
             });
 
             injectStyles(aMerged);
         });
     };
 
-    /* Apply immediately */
     applyHiddenMenus();
 
     /* Re-apply when storage changes (user toggles in popup) */

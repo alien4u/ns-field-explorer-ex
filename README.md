@@ -10,7 +10,7 @@
 
 **Explore and inspect every field on any NetSuite record: body fields, sublists, raw data, and navigation management in one tool.**
 
-![Version](https://img.shields.io/badge/version-1.1.1-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-FSL--1.1--MIT-green)
 ![Manifest](https://img.shields.io/badge/manifest-v3-orange)
 
@@ -46,11 +46,11 @@ Open any record, click the icon, and get a complete breakdown of the record's da
 
 - ↕️ **Sortable Columns** · Click column headers to sort body fields by ID, value, or type.
 
-- 📥 **Export** · Download filtered data as JSON or CSV with one click.
+- 📥 **Export** · Download filtered data as JSON, body-field CSV, or per-sublist CSV with one click. CSV exports carry a UTF-8 BOM and are formula-injection safe.
 
 - 📖 **Records Browser & Catalog Links** · Quick links to NetSuite's official record documentation for the current record type.
 
-- 🌙 **Dark / Light Mode**
+- 🌙 **Auto / Dark / Light Theme** · Auto follows your system theme and repaints when it changes.
 
 - 📐 **Compact Mode** · Condensed layout for smaller screens.
 
@@ -89,7 +89,7 @@ The extension fetches the record's XML representation (`&xml=T`) via NetSuite's 
 ### Nav Manager
 
 1. Click the extension icon on any NetSuite page.
-2. Click the **🗂️ Nav** button in the header.
+2. Click the **Nav Manager** button (folder icon) in the header.
 3. The menu tree loads all detected navigation items.
 4. Check items to hide them. Choose **All Instances** for global rules or the **Account** section for per-account rules.
 5. Click **← Back** to return to the field explorer.
@@ -149,13 +149,13 @@ Hidden menus are applied instantly via a content script that injects CSS on ever
 | Permission | Purpose |
 |------------|---------|
 | `activeTab` | Interact with the current page when activated |
-| `storage` | Persist preferences and Nav Manager configuration |
+| `storage` | Persist preferences and Nav Manager configuration (display preferences roam via your browser's sync) |
 | `scripting` | Execute scripts in NetSuite tabs for data retrieval and menu extraction |
 | `optional_host_permissions: *.netsuite.com` | Requested on first Nav Manager use to auto-hide menus on page load |
 
 ## Browser Compatibility
 
-Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
+Chrome, Edge, Firefox (MV3, 140+), and Safari (via Web Extension wrapper).
 
 > The default `manifest.json` targets Chrome and Edge. A `manifest_firefox.json` is included for Firefox, which adds the `background.scripts` fallback and `browser_specific_settings` required by Firefox's extension platform.
 
@@ -166,6 +166,46 @@ Chrome, Edge, Firefox (MV3, 109+), and Safari (via Web Extension wrapper).
 - Sponsored by **[SuiteMigration](https://suitemigration.com/netsuite-extension-alien/?utm_source=alien_technology&utm_medium=banner&utm_campaign=alien_extensions&utm_content=ns-field-explorer-ex)**
 
 ## Changelog
+
+### v1.2.0 - 2026-08-04
+
+**Popup sizing**
+
+- Pre-paint size and theme restore via `js/boot.js` - the popup now opens at its stored size instead of painting at the default and correcting afterwards, which is what produced the white band on Chrome 151
+- Size clamps moved under Chrome's hard popup cap (792x592) and the dragged values are persisted instead of rounded element sizes
+- `html` carries the theme background and `color-scheme`, so there is no light flash on a dark-themed popup
+
+**Features**
+
+- Sublist CSV export - export every line of the selected sublist with its column headers
+- Auto dark mode - the theme toggle now cycles Auto / Dark / Light, Auto follows the system theme live
+- Display preferences roam through `storage.sync` with a one-time copy-forward from existing local settings
+- Sublist search now filters lines as well as columns, and large sublists render the first 500 rows with a notice (exports remain complete)
+- Sticky table headers and sticky copy buttons in the Raw JSON and Legacy panels
+- Nav Manager: rules whose menu item is missing from the scanned page are listed under "Not in current menu" with per-rule Unhide, plus a two-step "Clear all" per scope
+
+**Fixes**
+
+- NetSuite detection now parses the hostname instead of substring-matching the URL, in both the explorer and the Nav Manager menu scrape
+- Copy feedback is tracked per element, so two quick copies no longer strand a "Copied" label, and a failed copy reports "Copy failed" instead of failing silently
+- Value-column sort and sublist search no longer stringify select fields to `[object Object]`
+- navhider matches on `aria-label` only when no `data-automation-id` was captured, ending over-hiding of same-label items
+- Account rules are no longer saved under a dead key when no account is detected
+- Startup failures render an error instead of leaving "Loading record data..." on screen
+- Links inside the Legacy JSON tree open in a new tab instead of navigating the popup away
+- CSV exports carry a UTF-8 BOM and guard against spreadsheet formula injection
+
+**Accessibility and performance**
+
+- ARIA tablist with arrow-key navigation, `aria-sort` on sortable headers, keyboard-activatable copy targets and visible focus states
+- 150 ms search debounce, and only the visible panel re-renders on each keystroke
+
+**Housekeeping**
+
+- Shared module (`js/shared.js`) removes four copies of the browser API shim and two of the registration logic
+- Content-script registration is now verified after every register/update
+- Nav rule storage schema v2 with a one-time migration on update
+- Firefox `strict_min_version` lowered to 140.0 (ESR); `build.sh` enforces manifest version parity and stops shipping unreferenced artwork
 
 ### v1.1.1 - 2026-03-10
 

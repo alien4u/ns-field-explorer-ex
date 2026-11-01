@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <title>NetSuite Field Explorer EX</title>
+    <script src="js/boot.js"></script>
     <link rel="stylesheet" href="lib/json-formatter-js/json-formatter-js.css" />
     <link rel="stylesheet" href="css/main.css" />
 </head>
@@ -126,17 +127,20 @@
 </div>
 
 <!-- Tabs (New Mode) -->
-<nav id="tabBar">
-    <button class="tab-btn active" data-tab="panelBody">Body Fields</button>
-    <button class="tab-btn" data-tab="panelSublists">Sublists</button>
-    <button class="tab-btn" data-tab="panelRaw">Raw JSON</button>
+<nav id="tabBar" role="tablist" aria-label="Record views">
+    <button class="tab-btn active" id="tabBtnBody" role="tab" aria-selected="true"
+            aria-controls="panelBody" tabindex="0" data-tab="panelBody">Body Fields</button>
+    <button class="tab-btn" id="tabBtnSublists" role="tab" aria-selected="false"
+            aria-controls="panelSublists" tabindex="-1" data-tab="panelSublists">Sublists</button>
+    <button class="tab-btn" id="tabBtnRaw" role="tab" aria-selected="false"
+            aria-controls="panelRaw" tabindex="-1" data-tab="panelRaw">Raw JSON</button>
 </nav>
 
 <!-- Tab Panels (New Mode) -->
 <div id="container">
 
     <!-- Body Fields -->
-    <div id="panelBody" class="tab-panel active">
+    <div id="panelBody" class="tab-panel active" role="tabpanel" aria-labelledby="tabBtnBody">
         <div class="table-wrap">
             <table id="bodyFieldsTableOuter">
                 <thead>
@@ -154,11 +158,15 @@
     </div>
 
     <!-- Sublists -->
-    <div id="panelSublists" class="tab-panel">
+    <div id="panelSublists" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnSublists">
         <div id="sublistContainer">
             <div class="sublist-picker">
                 <label for="sublistSelect">Sublist:</label>
                 <select id="sublistSelect"></select>
+                <button id="exportSublistCsvBtn" class="fe-mini-btn" title="Export this sublist as CSV">
+                    <svg class="fe-icon" style="width:13px;height:13px;"><use href="#ico-table"/></svg>
+                    <span>CSV</span>
+                </button>
             </div>
             <div class="table-wrap">
                 <table id="sublistTableOuter">
@@ -171,12 +179,14 @@
     </div>
 
     <!-- Raw JSON -->
-    <div id="panelRaw" class="tab-panel">
+    <div id="panelRaw" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnRaw">
         <div id="rawJsonContainer">
-            <button id="copyRawJsonBtn" class="fe-copy-float fe-copy-float-raw" title="Copy JSON to clipboard">
-                <svg class="fe-icon" style="width:12px;height:12px;"><use href="#ico-copy"/></svg>
-                <span>Copy</span>
-            </button>
+            <div class="fe-copy-bar">
+                <button id="copyRawJsonBtn" class="fe-copy-float fe-copy-float-raw" title="Copy JSON to clipboard">
+                    <svg class="fe-icon" style="width:12px;height:12px;"><use href="#ico-copy"/></svg>
+                    <span>Copy</span>
+                </button>
+            </div>
             <pre class="raw-json">Loading...</pre>
         </div>
     </div>
@@ -185,10 +195,12 @@
 
 <!-- Legacy Mode Container -->
 <div id="legacyContainer" style="display:none;">
-    <button id="copyLegacyJsonBtn" class="fe-copy-float" title="Copy raw JSON to clipboard">
-        <svg class="fe-icon" style="width:12px;height:12px;"><use href="#ico-copy"/></svg>
-        <span>Copy</span>
-    </button>
+    <div class="fe-copy-bar">
+        <button id="copyLegacyJsonBtn" class="fe-copy-float" title="Copy raw JSON to clipboard">
+            <svg class="fe-icon" style="width:12px;height:12px;"><use href="#ico-copy"/></svg>
+            <span>Copy</span>
+        </button>
+    </div>
     <div id="legacyTree"><div class="loading-msg">Loading record data...</div></div>
 </div>
 
@@ -236,14 +248,14 @@
     <div id="navManagerStatus" class="nav-manager-status">No menu items hidden</div>
     <div class="nav-manager-body">
         <div class="nav-section">
-            <div class="nav-section-header" data-target="navTreeAll">
+            <div class="nav-section-header">
                 <span class="nav-section-toggle">&#9660;</span>
                 <span class="nav-section-title">All Instances</span>
             </div>
             <div id="navTreeAll" class="nav-section-content"></div>
         </div>
         <div class="nav-section">
-            <div class="nav-section-header" data-target="navTreeAccount">
+            <div class="nav-section-header">
                 <span class="nav-section-toggle">&#9660;</span>
                 <span id="navAccountLabel" class="nav-section-title">Account: (detecting...)</span>
             </div>
@@ -255,16 +267,16 @@
 
 <!-- Footer -->
 <footer class="fe-footer">
-    <div id="resourceLinks" class="fe-footer-row fe-footer-links">
-        <a id="recordsBrowserLink" href="#" target="_blank" style="display:none;">
+    <div class="fe-footer-row fe-footer-links">
+        <a id="recordsBrowserLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">
             <svg class="fe-icon" style="width:12px;height:12px;vertical-align:-1px;margin-right:3px;"><use href="#ico-external"/></svg>Records Browser
         </a>
-        <a id="recordsCatalogLink" href="#" target="_blank" style="display:none;">
+        <a id="recordsCatalogLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">
             <svg class="fe-icon" style="width:12px;height:12px;vertical-align:-1px;margin-right:3px;"><use href="#ico-external"/></svg>Records Catalog
         </a>
     </div>
     <div class="fe-footer-row">
-        <span class="fe-footer-text">Field Explorer EX v1.1.1</span>
+        <span class="fe-footer-text">Field Explorer EX v1.2.0</span>
         <span class="fe-footer-sep"></span>
         <span class="fe-footer-brand">
             <img src="img/alien-tech.svg" alt="" class="fe-footer-logo">
@@ -291,6 +303,7 @@
     </svg>
 </div>
 
+<script src="js/shared.js"></script>
 <script src="lib/json-formatter-js/json-formatter-js.js"></script>
 <script src="js/popup.js"></script>
 <script src="js/navmanager.js"></script>
