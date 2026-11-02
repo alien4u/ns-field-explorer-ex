@@ -10,7 +10,7 @@
 
 **Explore and inspect every field on any NetSuite record: body fields, sublists, raw data, and navigation management in one tool.**
 
-![Version](https://img.shields.io/badge/version-1.1.1-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-FSL--1.1--MIT-green)
 ![Manifest](https://img.shields.io/badge/manifest-v3-orange)
 
@@ -20,9 +20,9 @@
 |-------|---------|------|
 | Chrome Web Store | v1.1.1 | [Install](https://chromewebstore.google.com/detail/netsuite-field-explorer-e/pdmkaejbieljlcemfjpmgifjljhgniij) |
 | Edge Add-ons | v1.1.1 | [Install](https://microsoftedge.microsoft.com/addons/detail/fanclcoacijckjhfbcocfmcdfkkbnlci) |
-| Firefox Add-ons | v1.1.1 | [Install](https://addons.mozilla.org/en-US/firefox/addon/netsuite-field-explorer-ex/) |
+| Firefox Add-ons | v1.2.0 | [Install](https://addons.mozilla.org/en-US/firefox/addon/netsuite-field-explorer-ex/) |
 
-> v1.2.0 is awaiting store approval. The stores still serve v1.1.1.
+> v1.2.0 is live on Firefox Add-ons and awaiting approval on the Chrome Web Store and Edge Add-ons.
 
 ## Overview
 
