@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsResponse>
+<record recordType="customtransaction_synth" id="56" perm="4" fields="memo">
+<memo>Synthetic custom transaction</memo>
+</record>
+</nsResponse>

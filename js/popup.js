@@ -4,7 +4,8 @@
  */
 window.fex = {
     navOpen: false,
-    renderIfReady: () => {}
+    renderIfReady: () => {},
+    applySearch: () => {}
 };
 
 /**
@@ -54,6 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 const runFieldExplorer = async () => {
 
+    /* Before anything can fail or gate the page: the footer shows the version everywhere */
+    const oFooterVersion = document.getElementById('footerVersion');
+
+    if (oFooterVersion) oFooterVersion.textContent = `Field Explorer EX v${browserAPI.runtime.getManifest().version}`;
+
     /* ──── DOM References ──── */
 
     const oSearchBox = document.getElementById('searchBox');
@@ -71,6 +77,9 @@ const runFieldExplorer = async () => {
     const oExportSublistCsvBtn = document.getElementById('exportSublistCsvBtn');
     const oViewModeSelect = document.getElementById('viewModeSelect');
     const oFieldFilterSelect = document.getElementById('fieldFilterSelect');
+    const oShowEmptyToggle = document.getElementById('showEmptyToggle');
+    const oPinBtn = document.getElementById('pinBtn');
+    const oPinStatus = document.getElementById('pinStatus');
 
     /* Links */
     const oRecordsBrowserLink = document.getElementById('recordsBrowserLink');
@@ -82,6 +91,13 @@ const runFieldExplorer = async () => {
     const oSublistTable = document.getElementById('sublistTable');
     const oRawJsonContainer = document.getElementById('rawJsonContainer');
     const oCopyRawJsonBtn = document.getElementById('copyRawJsonBtn');
+    const oCompareHeader = document.getElementById('compareHeader');
+    const oCompareBody = document.getElementById('compareBody');
+
+    /* Tab buttons relabelled at runtime */
+    const oTabBtnBody = document.getElementById('tabBtnBody');
+    const oTabBtnSublists = document.getElementById('tabBtnSublists');
+    const oTabBtnCompare = document.getElementById('tabBtnCompare');
 
     /* Legacy mode containers */
     const oTabBar = document.getElementById('tabBar');
@@ -92,6 +108,22 @@ const runFieldExplorer = async () => {
     /* Parsed record data */
     let oRecord = null;
 
+    /* Labels and types per field, merged from the page and the Oracle reference */
+    let oFieldMeta = { oBody: {}, oSublists: {} };
+
+    /* Rows matching the current term, filter and Empty state. Tab counts, the sublist dropdown
+     * and the tables all read this one result, so they cannot disagree. */
+    let oSearchView = null;
+
+    /* Line haystacks, built once per sublist the first time a term is set */
+    const oSublistIndexes = {};
+
+    /* Pinned snapshot and its diff against the loaded record */
+    const oSessionStore = browserAPI.storage.session || null;
+    let oPinned = null;
+    let oCompareDiff = null;
+    let sCurrentAccount = '';
+
     /* Non-record page message (set when no record detected) */
     let sNonRecordMsg = '';
     let sNonRecordClass = 'empty-msg';
@@ -101,7 +133,7 @@ const runFieldExplorer = async () => {
     let bSortAsc = true;
 
     /* Panels holding stale output because a render was skipped while they were hidden */
-    const oDirty = { body: false, sublists: false, raw: false };
+    const oDirty = { body: false, sublists: false, raw: false, compare: false };
 
     /* Rows currently painted in the sublist table, resolved by the delegated copy handler */
     let aRenderedCols = [];
@@ -109,20 +141,23 @@ const runFieldExplorer = async () => {
 
     const nSublistRenderCap = 500;
 
-    /* ──── Custom Field Detection ──── */
+    /* ──── Filter Helpers ──── */
 
     /**
-     * Determines if a field ID represents a custom field
-     * @param {string} pFieldId - field ID to check
-     * @returns {boolean} true if custom field
+     * @returns {string} active field filter ('all', 'custom' or 'standard')
      */
-    function isCustomField(pFieldId) {
+    function getFieldFilter() {
 
-        const sId = (pFieldId || '').toLowerCase();
-        return /^(custbody|custcol|custitem|custevent|custentity|custrecord)/.test(sId);
+        return oFieldFilterSelect?.value || 'all';
     }
 
-    /* ──── Filter Helpers ──── */
+    /**
+     * @returns {string} lowercase search term, '' for none
+     */
+    function getSearchTerm() {
+
+        return (oSearchBox?.value || '').toLowerCase();
+    }
 
     /**
      * Tests a field ID against the active field filter.
@@ -131,11 +166,7 @@ const runFieldExplorer = async () => {
      */
     function matchesFieldFilter(pFieldId) {
 
-        const sFilter = oFieldFilterSelect?.value || 'all';
-
-        if (sFilter === 'all') return true;
-
-        return sFilter === 'custom' ? isCustomField(pFieldId) : !isCustomField(pFieldId);
+        return passesFieldFilter(pFieldId, getFieldFilter());
     }
 
     /**
@@ -147,25 +178,13 @@ const runFieldExplorer = async () => {
     }
 
     /**
-     * Renders a field value as the string used for copy, search and CSV.
-     * @param {*} pValue - field value
-     * @returns {string} flat string representation
-     */
-    function stringifyFieldValue(pValue) {
-
-        if (pValue === null || pValue === undefined) return '';
-
-        return (typeof pValue === 'object') ? JSON.stringify(pValue) : String(pValue);
-    }
-
-    /**
      * Filters an object of fields based on current field filter setting.
      * @param {Object} pFields - key/value pairs to filter
      * @returns {Object} filtered fields
      */
     function filterFieldsByType(pFields) {
 
-        if ((oFieldFilterSelect?.value || 'all') === 'all') return pFields;
+        if (getFieldFilter() === 'all') return pFields;
 
         const oFiltered = {};
 
@@ -178,16 +197,6 @@ const runFieldExplorer = async () => {
     }
 
     /**
-     * Filters sublist columns (array of column names) based on field filter.
-     * @param {Array<string>} pCols - column ID strings
-     * @returns {Array<string>} filtered columns
-     */
-    function filterSublistCols(pCols) {
-
-        return pCols.filter((pCol) => matchesFieldFilter(pCol));
-    }
-
-    /**
      * Filters sublist line data for legacy mode.
      * Removes columns from each line object based on filter.
      * @param {Object} pSublists - { sublistName: [line, ...] }
@@ -195,7 +204,7 @@ const runFieldExplorer = async () => {
      */
     function filterSublistsForLegacy(pSublists) {
 
-        if ((oFieldFilterSelect?.value || 'all') === 'all') return pSublists;
+        if (getFieldFilter() === 'all') return pSublists;
 
         const oFiltered = {};
 
@@ -225,7 +234,9 @@ const runFieldExplorer = async () => {
     /* ──── Storage Helpers ──── */
 
     /* Roaming preferences live in storage.sync with storage.local as the always-fresh fallback */
-    const FEX_ROAMING_KEYS = ['fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter'];
+    const FEX_ROAMING_KEYS = [
+        'fex_darkMode', 'fex_compactMode', 'fex_viewMode', 'fex_fieldFilter', 'fex_showEmpty'
+    ];
 
     /* Popup size is device-local by design - screens differ per machine */
     const FEX_SIZE_KEYS = ['fex_popupWidth', 'fex_popupHeight'];
@@ -487,6 +498,9 @@ const runFieldExplorer = async () => {
 
         oRoot.classList.toggle('theme-dark', bDark);
 
+        /* The formatter fixes its colors at render time, so a visible tree has to be rebuilt */
+        if (oRecord && getViewMode() === 'legacy' && !window.fex.navOpen) renderLegacyView();
+
         if (!oDarkToggle) return;
 
         oDarkToggle.classList.toggle('active', bDark);
@@ -540,6 +554,8 @@ const runFieldExplorer = async () => {
     if (oSettings.fex_fieldFilter && oFieldFilterSelect) {
         oFieldFilterSelect.value = oSettings.fex_fieldFilter;
     }
+
+    if (oShowEmptyToggle) oShowEmptyToggle.checked = oSettings.fex_showEmpty === true;
 
     /* ──── Restore Popup Size ──── */
 
@@ -670,6 +686,10 @@ const runFieldExplorer = async () => {
         renderRecordInfo();
         renderSublistSelector();
         updateLinks();
+        updateCompareTab();
+
+        if (oPinBtn && oSessionStore) oPinBtn.style.display = '';
+
         applyViewMode();
     };
 
@@ -700,11 +720,12 @@ const runFieldExplorer = async () => {
         if (!oRecord) return;
 
         updateFieldCount();
+        updateTabLabels();
         renderActivePanel();
     }
 
     /**
-     * Renders the panel the user is looking at and marks the other two stale so
+     * Renders the panel the user is looking at and marks the others stale so
      * they re-render on their next activation instead of on every keystroke.
      */
     function renderActivePanel() {
@@ -714,11 +735,14 @@ const runFieldExplorer = async () => {
         oDirty.body = sActive !== 'panelBody';
         oDirty.sublists = sActive !== 'panelSublists';
         oDirty.raw = sActive !== 'panelRaw';
+        oDirty.compare = sActive !== 'panelCompare';
 
         if (sActive === 'panelBody') {
             renderBodyFields();
         } else if (sActive === 'panelSublists') {
-            renderActiveSublist();
+            renderSublistPanel();
+        } else if (sActive === 'panelCompare') {
+            renderCompare();
         } else {
             renderRawJson();
         }
@@ -745,7 +769,19 @@ const runFieldExplorer = async () => {
             return;
         }
 
-        renderSublistSelector();
+        updateTabLabels();
+        renderActivePanel();
+    });
+
+    /* ──── Empty Fields Handler ──── */
+
+    oShowEmptyToggle?.addEventListener('change', () => {
+
+        saveSetting('fex_showEmpty', oShowEmptyToggle.checked);
+
+        if (!oRecord || getViewMode() === 'legacy') return;
+
+        updateTabLabels();
         renderActivePanel();
     });
 
@@ -778,11 +814,14 @@ const runFieldExplorer = async () => {
             renderBodyFields();
             oDirty.body = false;
         } else if (sTarget === 'panelSublists' && oDirty.sublists) {
-            renderActiveSublist();
+            renderSublistPanel();
             oDirty.sublists = false;
         } else if (sTarget === 'panelRaw' && oDirty.raw) {
             renderRawJson();
             oDirty.raw = false;
+        } else if (sTarget === 'panelCompare' && oDirty.compare) {
+            renderCompare();
+            oDirty.compare = false;
         }
     }
 
@@ -795,7 +834,7 @@ const runFieldExplorer = async () => {
 
         if (pEvent.key !== 'ArrowLeft' && pEvent.key !== 'ArrowRight') return;
 
-        const aBtns = Array.from(aTabBtns);
+        const aBtns = Array.from(aTabBtns).filter((pBtn) => pBtn.style.display !== 'none');
         const nCurrent = aBtns.indexOf(document.activeElement);
 
         if (nCurrent < 0) return;
@@ -810,7 +849,7 @@ const runFieldExplorer = async () => {
 
     /* ──── Search / Filter ──── */
 
-    oSearchBox?.addEventListener('input', fexDebounce(() => {
+    window.fex.applySearch = () => {
 
         if (!oRecord) return;
 
@@ -819,8 +858,11 @@ const runFieldExplorer = async () => {
             return;
         }
 
+        updateTabLabels();
         renderActivePanel();
-    }, 150));
+    };
+
+    oSearchBox?.addEventListener('input', fexDebounce(() => window.fex.applySearch(), 150));
 
     oSearchBox?.focus();
 
@@ -863,36 +905,6 @@ const runFieldExplorer = async () => {
         oAnchor.rel = 'noopener noreferrer';
     }, true);
 
-    /* ──── CSV Helpers ──── */
-
-    /* Excel only detects UTF-8 in a downloaded CSV when the BOM is present */
-    const CSV_BOM = '\ufeff';
-
-    /**
-     * Quotes a CSV cell and neutralizes values a spreadsheet would evaluate.
-     * @param {*} pValue - cell value
-     * @returns {string} quoted, formula-safe cell
-     */
-    function toCsvCell(pValue) {
-
-        /* Half-width and full-width forms of the four spreadsheet formula leaders, plus
-         * the whitespace a leading formula can hide behind (OWASP CSV injection) */
-        const sValue = String(pValue ?? '');
-        const sGuarded = /^[=+\-@\t\r\n＝＋－＠]/.test(sValue) ? `'${sValue}` : sValue;
-
-        return `"${sGuarded.replace(/"/g, '""')}"`;
-    }
-
-    /**
-     * Serializes rows to CSV text with the BOM prefix.
-     * @param {Array<Array>} pRows - header row followed by data rows
-     * @returns {string} CSV document
-     */
-    function buildCsv(pRows) {
-
-        return CSV_BOM + pRows.map((pRow) => pRow.map((pCol) => toCsvCell(pCol)).join(',')).join('\n');
-    }
-
     /* ──── Export Handlers ──── */
 
     /* Exports follow the field filter, ignore the search box and ignore the render cap */
@@ -903,21 +915,22 @@ const runFieldExplorer = async () => {
 
         const sJson = JSON.stringify(buildExportObject(), null, 2);
 
-        downloadFile(sJson, `${oRecord.sRecordType}_${oRecord.sId}.json`, 'application/json');
+        downloadFile(sJson, `${oRecord.sRecordType}_${oRecord.sId || 'new'}.json`, 'application/json');
     });
 
     oExportCsvBtn?.addEventListener('click', () => {
 
         if (!oRecord) return;
 
-        const aRows = [['Field ID', 'Value', 'Type']];
+        const aRows = [['Field ID', 'Label', 'Value', 'Type']];
+        const bShowEmpty = !!oShowEmptyToggle?.checked;
 
-        Object.entries(filterFieldsByType(oRecord.oBodyFields)).forEach(([pKey, pValue]) => {
+        buildBodyRows(oRecord, oFieldMeta, '', getFieldFilter(), bShowEmpty).forEach((pRow) => {
 
-            aRows.push([pKey, stringifyFieldValue(pValue), detectFieldType(pKey, pValue)]);
+            aRows.push([pRow.sId, pRow.sLabel, stringifyFieldValue(pRow.vValue), pRow.sType]);
         });
 
-        downloadFile(buildCsv(aRows), `${oRecord.sRecordType}_${oRecord.sId}_fields.csv`, 'text/csv');
+        downloadFile(buildCsv(aRows), `${oRecord.sRecordType}_${oRecord.sId || 'new'}_fields.csv`, 'text/csv');
     });
 
     oExportSublistCsvBtn?.addEventListener('click', () => {
@@ -929,11 +942,7 @@ const runFieldExplorer = async () => {
 
         if (!aLines || aLines.length === 0) return;
 
-        const oColSet = new Set();
-
-        aLines.forEach((pLine) => Object.keys(pLine).forEach((pKey) => oColSet.add(pKey)));
-
-        const aCols = filterSublistCols(Array.from(oColSet));
+        const aCols = oRecord.oSublistInfo[sSelected].aCols.filter((pCol) => matchesFieldFilter(pCol));
 
         if (aCols.length === 0) return;
 
@@ -944,7 +953,9 @@ const runFieldExplorer = async () => {
             aRows.push([pIndex + 1, ...aCols.map((pCol) => formatDisplayValue(pLine[pCol]))]);
         });
 
-        downloadFile(buildCsv(aRows), `${oRecord.sRecordType}_${oRecord.sId}_${sSelected}.csv`, 'text/csv');
+        const sFileId = oRecord.sId || 'new';
+
+        downloadFile(buildCsv(aRows), `${oRecord.sRecordType}_${sFileId}_${sSelected}.csv`, 'text/csv');
     });
 
     /* ──── Copy Raw / Legacy JSON ──── */
@@ -988,9 +999,86 @@ const runFieldExplorer = async () => {
             sId: oRecord.sId,
             oBodyFields: oFilteredBody,
             oSublists: oFilteredSublists,
+            oFieldLabels: buildFieldLabels(oFilteredBody, oFilteredSublists, oFieldMeta),
             nBodyFieldCount: Object.keys(oFilteredBody).length,
             nSublistCount: Object.keys(oFilteredSublists).length
         };
+    }
+
+    /* ──── Pin / Compare ──── */
+
+    /**
+     * Shows the outcome of a pin action next to the count badge.
+     * @param {string} pMessage - message, '' to clear
+     * @param {boolean} pIsError - style as a failure
+     */
+    function showPinStatus(pMessage, pIsError) {
+
+        if (!oPinStatus) return;
+
+        oPinStatus.textContent = pMessage;
+        oPinStatus.classList.toggle('error', pIsError);
+    }
+
+    oPinBtn?.addEventListener('click', async () => {
+
+        if (!oRecord || !oSessionStore) return;
+
+        const oSnapshot = {
+            sAccount: sCurrentAccount,
+            sRecordType: oRecord.sRecordType,
+            sId: oRecord.sId,
+            oBodyFields: oRecord.oBodyFields,
+            oSublists: oRecord.oSublists,
+            oFieldLabels: buildFieldLabels(oRecord.oBodyFields, oRecord.oSublists, oFieldMeta),
+            nPinnedAt: Date.now()
+        };
+
+        try {
+            await oSessionStore.set({ [FEX_PINNED_KEY]: oSnapshot });
+        } catch (pErr) {
+
+            console.warn('[FEX] pin', pErr);
+            showPinStatus('Could not pin this record', true);
+            return;
+        }
+
+        oPinned = oSnapshot;
+        oCompareDiff = null;
+        showPinStatus('Pinned', false);
+        updateCompareTab();
+
+        if (document.getElementById('panelCompare')?.classList.contains('active')) renderCompare();
+    });
+
+    /**
+     * Shows or hides the Compare tab. Its count ignores search and filter on purpose, so it does
+     * not move while the user narrows the view.
+     */
+    function updateCompareTab() {
+
+        if (!oTabBtnCompare) return;
+
+        if (!oPinned || !oRecord) {
+
+            const bWasActive = oTabBtnCompare.classList.contains('active');
+
+            oTabBtnCompare.style.display = 'none';
+
+            if (bWasActive) activateTab(oTabBtnBody);
+
+            return;
+        }
+
+        oCompareDiff = oCompareDiff || diffRecords(oPinned, {
+            oBodyFields: oRecord.oBodyFields,
+            oSublists: oRecord.oSublists,
+            oFieldLabels: buildFieldLabels(oRecord.oBodyFields, oRecord.oSublists, oFieldMeta)
+        });
+
+        oTabBtnCompare.textContent = `Compare (${oCompareDiff.nTotal})`;
+        oTabBtnCompare.style.display = '';
+        oDirty.compare = true;
     }
 
     /* ──── Copy to Clipboard ──── */
@@ -1133,63 +1221,6 @@ const runFieldExplorer = async () => {
         return oTr;
     }
 
-    /* ──── Field Type Detection ──── */
-
-    /**
-     * Infers field type from field ID and value patterns
-     * @param {string} pFieldId - field ID
-     * @param {*} pValue - field value
-     * @returns {string} field type (checkbox, date, select, currency, etc.)
-     */
-    function detectFieldType(pFieldId, pValue) {
-
-        const sId = (pFieldId || '').toLowerCase();
-        const sVal = String(pValue ?? '');
-
-        if (sVal === 'T' || sVal === 'F') return 'checkbox';
-        if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(sVal)) return 'date';
-        if (/\d{4}-\d{2}-\d{2}T/.test(sVal)) return 'datetime';
-
-        if (typeof pValue === 'object' && pValue !== null) {
-            if (pValue._text || pValue.__text) return 'select';
-            if (Array.isArray(pValue)) return 'multiselect';
-            return 'object';
-        }
-
-        if (/^-?\d+\.\d{2}$/.test(sVal) && !sId.includes('id')) return 'currency';
-        if (/^-?\d+(\.\d+)?$/.test(sVal) && sVal.length < 15) return 'number';
-        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sVal)) return 'email';
-        if (/^https?:\/\//.test(sVal)) return 'url';
-        if (sId.endsWith('id') || sId === 'id' || sId === '_id') return 'id';
-
-        return 'text';
-    }
-
-    /**
-     * Returns icon/emoji for a field type
-     * @param {string} pType - field type
-     * @returns {string} icon character
-     */
-    function getTypeIcon(pType) {
-
-        const oMap = {
-            'checkbox':    '☑',
-            'date':        '📅',
-            'datetime':    '📅',
-            'select':      '▼',
-            'multiselect': '▼▼',
-            'currency':    '💲',
-            'number':      '#',
-            'email':       '✉',
-            'url':         '🔗',
-            'id':          '🔑',
-            'object':      '{}',
-            'text':        'Aa'
-        };
-
-        return oMap[pType] || 'Aa';
-    }
-
     /* ──── Fetch & Parse Record via &xml=T ──── */
 
     /**
@@ -1201,6 +1232,9 @@ const runFieldExplorer = async () => {
 
         sNonRecordMsg = pText;
         sNonRecordClass = pClass || 'empty-msg';
+
+        /* Closing the Nav Manager repaints this through applyViewMode */
+        if (window.fex.navOpen) return;
 
         oTabBar.style.display = 'none';
 
@@ -1248,51 +1282,55 @@ const runFieldExplorer = async () => {
         return;
     }
 
-    /* Check if this looks like a record page (has standalone id= parameter) */
-    if (!oTabUrl.searchParams.has('id')) {
+    if (!isRecordCandidatePage(oTabUrl.href)) {
 
-        showNonRecordMessage('No record detected on this page. Use the Nav Manager button (folder icon) in the toolbar to manage navigation menus.');
+        showNonRecordMessage(FEX_MSG_NO_RECORD);
         return;
     }
+
+    sCurrentAccount = getAccountIdFromHostname(oTabUrl.hostname) || oTabUrl.hostname;
 
     const oXmlUrl = new URL(oTabUrl);
     oXmlUrl.searchParams.set('xml', 'T');
 
     try {
 
-        const [oResult] = await browserAPI.scripting.executeScript({
-            target: { tabId: oTab.id },
-            func: async (pUrl) => {
+        const oTarget = { tabId: oTab.id };
 
-                try {
-                    const oResp = await fetch(pUrl, { credentials: 'include' });
-                    if (!oResp.ok) return { error: `HTTP ${oResp.status}` };
-                    return { data: await oResp.text() };
-                } catch (pErr) {
-                    return { error: pErr.message };
-                }
-            },
-            args: [oXmlUrl.toString()]
-        });
+        /* The page read shares the wait with the fetch, and its failure only costs labels */
+        const [aFetchResults, oPageMeta] = await Promise.all([
+            browserAPI.scripting.executeScript({
+                target: oTarget,
+                func: fexFetchRecordXml,
+                args: [oXmlUrl.toString(), FEX_FETCH_TIMEOUT_MS]
+            }),
+            browserAPI.scripting.executeScript({ target: oTarget, func: fexReadPageMetadata })
+                .then((pResults) => pResults?.[0]?.result || {})
+                .catch(() => ({}))
+        ]);
 
-        if (oResult.result?.error) {
+        const oFetch = aFetchResults?.[0]?.result;
+        const oParsed = oFetch?.bXml ? parseRecordResponse(oFetch.sBody) : null;
+        const oOutcome = mapFetchOutcome(oFetch, oParsed);
 
-            showNonRecordMessage(`Failed to fetch record: ${oResult.result.error}`, 'error-msg');
+        if (oOutcome.sKind !== 'record') {
+
+            showNonRecordMessage(oOutcome.sMessage, oOutcome.sClass);
             return;
         }
 
-        const sXmlData = oResult.result?.data;
+        const oReference = await fetch(browserAPI.runtime.getURL(FEX_REFERENCE_PATH))
+            .then((pResp) => (pResp.ok ? pResp.json() : {}))
+            .catch(() => ({}));
 
-        if (!sXmlData) {
-            showNonRecordMessage('No data returned. Are you on a record page?');
-            return;
-        }
+        oFieldMeta = buildFieldMeta(oParsed.oRecord, oPageMeta, oReference);
+        oRecord = oParsed.oRecord;
 
-        oRecord = parseXmlRecord(sXmlData);
+        if (oSessionStore) {
 
-        if (!oRecord) {
-            showNonRecordMessage('Could not parse record data. Are you on a record page?');
-            return;
+            oPinned = await oSessionStore.get(FEX_PINNED_KEY)
+                .then((pStored) => pStored[FEX_PINNED_KEY] || null)
+                .catch(() => null);
         }
 
         /* Render all views (or defer if Nav Manager is open) */
@@ -1300,135 +1338,6 @@ const runFieldExplorer = async () => {
 
     } catch (pErr) {
         showNonRecordMessage(`Error: ${pErr.message}`, 'error-msg');
-    }
-
-    /* ──── XML Parser ──── */
-
-    /**
-     * Parses NetSuite XML record into structured data
-     * @param {string} pXmlString - XML string from &xml=T URL
-     * @returns {Object|null} parsed record with sRecordType, sId, oBodyFields, oSublists
-     */
-    function parseXmlRecord(pXmlString) {
-
-        const oParser = new DOMParser();
-        const oDoc = oParser.parseFromString(pXmlString, 'text/xml');
-
-        const oRecordNode = oDoc.querySelector('record');
-
-        if (!oRecordNode) return null;
-
-        const sRecordType = oRecordNode.getAttribute('recordType') || '';
-        const sId = oRecordNode.getAttribute('id') || '';
-        const oBodyFields = {};
-        const oSublists = {};
-
-        Array.from(oRecordNode.children).forEach(pChild => {
-
-            const sName = pChild.nodeName;
-
-            if (sName === 'machine') {
-
-                const sSublistName = pChild.getAttribute('name') || sName;
-                const aLines = [];
-
-                Array.from(pChild.children).filter(pEl => pEl.nodeName === 'line').forEach(pLine => {
-
-                    const oLineData = {};
-
-                    Array.from(pLine.children).forEach(pField => {
-
-                        oLineData[pField.nodeName] = parseFieldNode(pField);
-                    });
-
-                    Array.from(pLine.attributes).forEach(pAttr => {
-
-                        if (!oLineData[pAttr.name]) {
-                            oLineData[pAttr.name] = pAttr.value;
-                        }
-                    });
-
-                    aLines.push(oLineData);
-                });
-
-                oSublists[sSublistName] = aLines;
-
-            } else {
-
-                oBodyFields[sName] = parseFieldNode(pChild);
-            }
-        });
-
-        Array.from(oRecordNode.attributes).forEach(pAttr => {
-
-            if (pAttr.name !== 'recordType' && pAttr.name !== 'id') {
-                oBodyFields['_' + pAttr.name] = pAttr.value;
-            }
-        });
-
-        return {
-            sRecordType: sRecordType,
-            sId: sId,
-            oBodyFields: oBodyFields,
-            oSublists: oSublists,
-            nBodyFieldCount: Object.keys(oBodyFields).length,
-            nSublistCount: Object.keys(oSublists).length
-        };
-    }
-
-    /**
-     * Recursively parses an XML field node into JS value
-     * @param {Element} pNode - XML DOM node
-     * @returns {*} parsed value (string, object, or nested structure)
-     */
-    function parseFieldNode(pNode) {
-
-        if (pNode.children.length > 0) {
-
-            const oObj = {};
-
-            Array.from(pNode.children).forEach(pChild => {
-
-                const sName = pChild.nodeName;
-                const vParsed = parseFieldNode(pChild);
-
-                if (sName in oObj) {
-                    /* Duplicate child name — convert to array */
-                    if (!Array.isArray(oObj[sName])) {
-                        oObj[sName] = [oObj[sName]];
-                    }
-                    oObj[sName].push(vParsed);
-                } else {
-                    oObj[sName] = vParsed;
-                }
-            });
-
-            const sText = pNode.textContent?.trim();
-            if (sText && Object.keys(oObj).length === 0) return sText;
-
-            Array.from(pNode.attributes).forEach(pAttr => {
-
-                oObj['_' + pAttr.name] = pAttr.value;
-            });
-
-            return oObj;
-        }
-
-        if (pNode.attributes.length > 0) {
-
-            const oObj = { _value: pNode.textContent?.trim() || '' };
-
-            Array.from(pNode.attributes).forEach(pAttr => {
-
-                oObj['_' + pAttr.name] = pAttr.value;
-            });
-
-            if (Object.keys(oObj).length === 1) return oObj._value;
-
-            return oObj;
-        }
-
-        return pNode.textContent?.trim() || '';
     }
 
     /* ──── Render: Record Info Header ──── */
@@ -1445,7 +1354,9 @@ const runFieldExplorer = async () => {
         const aInfoParts = [
             { label: 'Record:', value: oRecord.sRecordType },
             { label: null, value: '|', cls: 'info-sep' },
-            { label: 'ID:', value: oRecord.sId }
+
+            /* In create mode there is no id to copy, so (new) renders through the plain branch */
+            oRecord.sId ? { label: 'ID:', value: oRecord.sId } : { label: 'ID:', value: '(new)', cls: 'info-value' }
         ];
 
         aInfoParts.forEach((pPart) => {
@@ -1484,14 +1395,107 @@ const runFieldExplorer = async () => {
         if (!oFieldCount || !oRecord) return;
 
         const nBodyCount = Object.keys(filterFieldsByType(oRecord.oBodyFields)).length;
-        const sFilter = oFieldFilterSelect?.value || 'all';
+        const sFilter = getFieldFilter();
         const sLabel = sFilter === 'all' ? '' : (sFilter === 'custom' ? 'custom ' : 'standard ');
+        const nEmptyCount = oRecord.aEmptyFields.filter((pId) => matchesFieldFilter(pId)).length;
+        const sEmpty = nEmptyCount > 0 ? ` · ${nEmptyCount} empty` : '';
 
         /* Sublists stay unfiltered so the badge always agrees with the dropdown */
-        oFieldCount.textContent = `${nBodyCount} ${sLabel}fields · ${oRecord.nSublistCount} sublists`;
+        oFieldCount.textContent = `${nBodyCount} ${sLabel}fields · ${oRecord.nSublistCount} sublists${sEmpty}`;
+    }
+
+    /* ──── Search View ──── */
+
+    /**
+     * Returns the rows matching the current term, filter and Empty state, working them out only
+     * when one of those changed.
+     * @returns {{sTerm: string, sFilter: string, aBodyRows: Array, oSublists: Object}}
+     */
+    function getSearchView() {
+
+        const sTerm = getSearchTerm();
+        const sFilter = getFieldFilter();
+        const bShowEmpty = !!oShowEmptyToggle?.checked;
+        const sKey = JSON.stringify([sTerm, sFilter, bShowEmpty]);
+
+        if (oSearchView?.sKey === sKey) return oSearchView;
+
+        const oSublists = {};
+
+        Object.entries(oRecord.oSublists).forEach(([pName, pLines]) => {
+
+            if (sTerm && !oSublistIndexes[pName]) oSublistIndexes[pName] = buildSublistIndex(pLines);
+
+            oSublists[pName] = searchSublist(pLines, oRecord.oSublistInfo[pName], oFieldMeta.oSublists[pName] || {},
+                oSublistIndexes[pName] || null, sTerm, sFilter, bShowEmpty);
+        });
+
+        oSearchView = {
+            sKey: sKey,
+            sTerm: sTerm,
+            sFilter: sFilter,
+            aBodyRows: buildBodyRows(oRecord, oFieldMeta, sTerm, sFilter, bShowEmpty),
+            oSublists: oSublists
+        };
+
+        return oSearchView;
+    }
+
+    /**
+     * Puts match counts on the Body Fields and Sublists tabs while a term is set.
+     */
+    function updateTabLabels() {
+
+        if (!oRecord || !oTabBtnBody || !oTabBtnSublists) return;
+
+        const oView = getSearchView();
+
+        if (!oView.sTerm) {
+
+            oTabBtnBody.textContent = 'Body Fields';
+            oTabBtnSublists.textContent = 'Sublists';
+            return;
+        }
+
+        let nLines = 0;
+
+        Object.values(oView.oSublists).forEach((pMatch) => {
+
+            nLines += pMatch.aLineIndexes.length;
+        });
+
+        oTabBtnBody.textContent = `Body Fields (${oView.aBodyRows.length})`;
+        oTabBtnSublists.textContent = `Sublists (${nLines})`;
     }
 
     /* ──── Render: Body Fields Table ──── */
+
+    /**
+     * Builds the muted label line shown under a field ID.
+     * @param {string} pLabel - field label
+     * @param {boolean} pMandatory - show the mandatory marker
+     * @param {string} pSearch - lowercase search term
+     * @returns {HTMLSpanElement}
+     */
+    function createLabelLine(pLabel, pMandatory, pSearch) {
+
+        const oLine = document.createElement('span');
+
+        oLine.className = 'fe-field-label';
+        oLine.appendChild(highlightSearch(pLabel, pSearch));
+
+        if (pMandatory) {
+
+            const oMark = document.createElement('span');
+
+            oMark.className = 'fe-mandatory';
+            oMark.title = 'Mandatory';
+            oMark.textContent = '*';
+            oLine.appendChild(oMark);
+        }
+
+        return oLine;
+    }
 
     /**
      * Renders body fields table with search/filter applied
@@ -1500,32 +1504,27 @@ const runFieldExplorer = async () => {
 
         if (!oBodyFieldsTable || !oRecord) return;
 
-        const sSearch = (oSearchBox?.value || '').toLowerCase();
-        const aEntries = Object.entries(filterFieldsByType(oRecord.oBodyFields));
-
-        const aFiltered = sSearch
-            ? aEntries.filter(([pKey, pVal]) =>
-                pKey.toLowerCase().includes(sSearch)
-                || stringifyFieldValue(pVal).toLowerCase().includes(sSearch))
-            : aEntries;
+        const oView = getSearchView();
+        const sSearch = oView.sTerm;
+        const aRows = oView.aBodyRows.slice();
 
         /* Sort if a column is selected */
         if (nSortColumn !== null) {
 
-            aFiltered.sort((pA, pB) => {
+            aRows.sort((pA, pB) => {
 
                 let sValA = '';
                 let sValB = '';
 
                 if (nSortColumn === 0) {
-                    sValA = pA[0].toLowerCase();
-                    sValB = pB[0].toLowerCase();
+                    sValA = pA.sId.toLowerCase();
+                    sValB = pB.sId.toLowerCase();
                 } else if (nSortColumn === 1) {
-                    sValA = formatDisplayValue(pA[1]).toLowerCase();
-                    sValB = formatDisplayValue(pB[1]).toLowerCase();
+                    sValA = formatDisplayValue(pA.vValue).toLowerCase();
+                    sValB = formatDisplayValue(pB.vValue).toLowerCase();
                 } else if (nSortColumn === 2) {
-                    sValA = detectFieldType(pA[0], pA[1]).toLowerCase();
-                    sValB = detectFieldType(pB[0], pB[1]).toLowerCase();
+                    sValA = pA.sType.toLowerCase();
+                    sValB = pB.sType.toLowerCase();
                 }
 
                 if (sValA < sValB) return bSortAsc ? -1 : 1;
@@ -1534,45 +1533,63 @@ const runFieldExplorer = async () => {
             });
         }
 
-        if (aFiltered.length === 0) {
+        if (aRows.length === 0) {
 
-            const sFilter = oFieldFilterSelect?.value || 'all';
+            const sFilterWord = oView.sFilter === 'all' ? '' : `${oView.sFilter} `;
 
             oBodyFieldsTable.textContent = '';
             oBodyFieldsTable.appendChild(createEmptyRow(3, sSearch
                 ? 'No fields match your search.'
-                : (sFilter === 'all' ? 'No fields in this record.' : `No ${sFilter} fields in this record.`)));
+                : `No ${sFilterWord}fields in this record.`));
             return;
         }
 
         const oFrag = document.createDocumentFragment();
 
-        aFiltered.forEach(([pKey, pValue]) => {
+        aRows.forEach((pRow) => {
 
-            const sType = detectFieldType(pKey, pValue);
+            const sKey = pRow.sId;
             const oRow = document.createElement('tr');
 
             const oIdTd = document.createElement('td');
             oIdTd.className = 'col-id';
-            const oIdSpan = createCopySpan(`Copy field ${pKey}`, highlightSearch(pKey, sSearch));
-            bindCopyTarget(oIdSpan, pKey);
+            const oIdSpan = createCopySpan(`Copy field ${sKey}`, highlightSearch(sKey, sSearch));
+            bindCopyTarget(oIdSpan, sKey);
             oIdTd.appendChild(oIdSpan);
+
+            if (pRow.sLabel || pRow.bMandatory) {
+                oIdTd.appendChild(createLabelLine(pRow.sLabel, pRow.bMandatory, sSearch));
+            }
+
             oRow.appendChild(oIdTd);
 
             const oValTd = document.createElement('td');
             oValTd.className = 'col-value';
-            const sDisplayVal = formatDisplayValue(pValue);
-            const oValSpan = createCopySpan(`Copy value of ${pKey}`, highlightSearch(sDisplayVal, sSearch));
-            bindCopyTarget(oValSpan, stringifyFieldValue(pValue));
-            oValTd.appendChild(oValSpan);
+
+            if (pRow.bEmpty) {
+
+                const oEmptySpan = createCopySpan(`Copy field ${sKey}`, '(empty)', 'clickable fe-empty-value');
+
+                bindCopyTarget(oEmptySpan, sKey);
+                oValTd.appendChild(oEmptySpan);
+
+            } else {
+
+                const sDisplayVal = formatDisplayValue(pRow.vValue);
+                const oValSpan = createCopySpan(`Copy value of ${sKey}`, highlightSearch(sDisplayVal, sSearch));
+
+                bindCopyTarget(oValSpan, stringifyFieldValue(pRow.vValue));
+                oValTd.appendChild(oValSpan);
+            }
+
             oRow.appendChild(oValTd);
 
             const oTypeTd = document.createElement('td');
             oTypeTd.className = 'col-type';
             const oTypeBadge = document.createElement('span');
             oTypeBadge.className = 'type-badge';
-            oTypeBadge.title = sType;
-            oTypeBadge.textContent = getTypeIcon(sType);
+            oTypeBadge.title = pRow.sType;
+            oTypeBadge.textContent = getTypeIcon(pRow.sType);
             oTypeTd.appendChild(oTypeBadge);
             oRow.appendChild(oTypeTd);
 
@@ -1608,16 +1625,45 @@ const runFieldExplorer = async () => {
             return;
         }
 
+        const oView = getSearchView();
+
         aSublistNames.forEach((pName) => {
 
             const oOpt = document.createElement('option');
+            const sLines = `${pName} (${oRecord.oSublists[pName].length} lines)`;
 
             oOpt.value = pName;
-            oOpt.textContent = `${pName} (${oRecord.oSublists[pName].length} lines)`;
+            oOpt.textContent = oView.sTerm
+                ? `${sLines} - ${oView.oSublists[pName].aLineIndexes.length} matches`
+                : sLines;
             oSublistSelect.appendChild(oOpt);
         });
 
         if (aSublistNames.includes(sPrevious)) oSublistSelect.value = sPrevious;
+    }
+
+    /**
+     * Renders the Sublists tab for the current search: refreshes the dropdown counts and moves
+     * the selection when it has no matches and another sublist does. A sublist the user picks
+     * by hand goes through renderActiveSublist alone, so it stays picked.
+     */
+    function renderSublistPanel() {
+
+        renderSublistSelector();
+
+        const oView = getSearchView();
+
+        if (oView.sTerm && oSublistSelect && !oView.oSublists[oSublistSelect.value]?.aLineIndexes.length) {
+
+            const sFirstHit = Object.keys(oView.oSublists).find((pName) => {
+
+                return oView.oSublists[pName].aLineIndexes.length > 0;
+            });
+
+            if (sFirstHit) oSublistSelect.value = sFirstHit;
+        }
+
+        renderActiveSublist();
     }
 
     /**
@@ -1631,7 +1677,6 @@ const runFieldExplorer = async () => {
         aRenderedLines = [];
 
         const sSelected = oSublistSelect?.value;
-        const sFilter = oFieldFilterSelect?.value || 'all';
 
         if (!sSelected || !oRecord.oSublists[sSelected]) {
 
@@ -1643,66 +1688,34 @@ const runFieldExplorer = async () => {
         }
 
         const aLines = oRecord.oSublists[sSelected];
-
-        if (aLines.length === 0) {
-
-            oSublistTable.textContent = '';
-            oSublistTable.appendChild(createEmptyRow(1, 'No lines in this sublist.'));
-            return;
-        }
-
-        const oColSet = new Set();
-
-        aLines.forEach((pLine) => Object.keys(pLine).forEach((pKey) => oColSet.add(pKey)));
-
-        const aCols = filterSublistCols(Array.from(oColSet));
+        const oView = getSearchView();
+        const sSearch = oView.sTerm;
+        const oMatch = oView.oSublists[sSelected];
+        const oColMeta = oFieldMeta.oSublists[sSelected] || {};
+        const aCols = oMatch.aCols;
 
         if (aCols.length === 0) {
 
+            let sMessage = 'No lines in this sublist.';
+
+            if (aLines.length > 0) {
+
+                const sFilterWord = oView.sFilter === 'all' ? '' : `${oView.sFilter} `;
+
+                sMessage = sSearch ? 'No fields match your search.' : `No ${sFilterWord}fields in this sublist.`;
+            }
+
             oSublistTable.textContent = '';
-            oSublistTable.appendChild(createEmptyRow(1, sFilter === 'all'
-                ? 'No fields in this sublist.'
-                : `No ${sFilter} fields in this sublist.`));
+            oSublistTable.appendChild(createEmptyRow(1, sMessage));
             return;
         }
 
-        const sSearch = (oSearchBox?.value || '').toLowerCase();
+        /* Line numbers stay absolute so a filtered view still maps back to the record */
+        aRenderedCols = aCols;
+        aRenderedLines = oMatch.aLineIndexes.slice(0, nSublistRenderCap).map((pIndex) => {
 
-        const aFilteredCols = sSearch
-            ? aCols.filter((pCol) =>
-                pCol.toLowerCase().includes(sSearch)
-                || aLines.some((pLine) => stringifyFieldValue(pLine[pCol]).toLowerCase().includes(sSearch)))
-            : aCols;
-
-        if (aFilteredCols.length === 0) {
-
-            oSublistTable.textContent = '';
-            oSublistTable.appendChild(createEmptyRow(1, 'No fields match your search.'));
-            return;
-        }
-
-        /* A column id hit keeps every line; otherwise a line needs a value hit */
-        const bColIdHit = !sSearch || aFilteredCols.some((pCol) => pCol.toLowerCase().includes(sSearch));
-        const aVisibleLines = [];
-
-        aLines.forEach((pLine, pIndex) => {
-
-            const bKeep = bColIdHit
-                || aFilteredCols.some((pCol) => stringifyFieldValue(pLine[pCol]).toLowerCase().includes(sSearch));
-
-            /* Line numbers stay absolute so a filtered view still maps back to the record */
-            if (bKeep) aVisibleLines.push({ nNumber: pIndex + 1, oLine: pLine });
+            return { nNumber: pIndex + 1, oLine: aLines[pIndex] };
         });
-
-        if (aVisibleLines.length === 0) {
-
-            oSublistTable.textContent = '';
-            oSublistTable.appendChild(createEmptyRow(aFilteredCols.length + 1, 'No lines match your search.'));
-            return;
-        }
-
-        aRenderedCols = aFilteredCols;
-        aRenderedLines = aVisibleLines.slice(0, nSublistRenderCap);
 
         const oFrag = document.createDocumentFragment();
         const oHeaderRow = document.createElement('tr');
@@ -1714,11 +1727,23 @@ const runFieldExplorer = async () => {
         oLineNumTh.textContent = '#';
         oHeaderRow.appendChild(oLineNumTh);
 
-        aFilteredCols.forEach((pCol) => {
+        aCols.forEach((pCol) => {
 
             const oTh = document.createElement('th');
+            const oMeta = oColMeta[pCol] || {};
+            const oIdSpan = createCopySpan(`Copy field ${pCol}`, highlightSearch(pCol, sSearch));
 
-            oTh.appendChild(createCopySpan(`Copy field ${pCol}`, pCol));
+            if (oMeta.sType) {
+                oTh.title = oMeta.sType;
+                oIdSpan.title = `${oMeta.sType} - click to copy`;
+            }
+
+            oTh.appendChild(oIdSpan);
+
+            if (oMeta.sLabel || oMeta.bMandatory) {
+                oTh.appendChild(createLabelLine(oMeta.sLabel, oMeta.bMandatory, sSearch));
+            }
+
             oHeaderRow.appendChild(oTh);
         });
 
@@ -1733,7 +1758,7 @@ const runFieldExplorer = async () => {
             oLineNumTd.textContent = pEntry.nNumber;
             oRow.appendChild(oLineNumTd);
 
-            aFilteredCols.forEach((pCol) => {
+            aCols.forEach((pCol) => {
 
                 const oTd = document.createElement('td');
                 const sDisplay = formatDisplayValue(pEntry.oLine[pCol]);
@@ -1745,10 +1770,12 @@ const runFieldExplorer = async () => {
             oFrag.appendChild(oRow);
         });
 
-        if (aVisibleLines.length > nSublistRenderCap) {
+        if (aLines.length === 0) oFrag.appendChild(createEmptyRow(aCols.length + 1, 'No lines in this sublist.'));
 
-            oFrag.appendChild(createEmptyRow(aFilteredCols.length + 1,
-                `Showing first ${nSublistRenderCap} of ${aVisibleLines.length} lines - use search to narrow.`));
+        if (oMatch.aLineIndexes.length > nSublistRenderCap) {
+
+            oFrag.appendChild(createEmptyRow(aCols.length + 1,
+                `Showing first ${nSublistRenderCap} of ${oMatch.aLineIndexes.length} lines - use search to narrow.`));
         }
 
         oSublistTable.textContent = '';
@@ -1787,7 +1814,8 @@ const runFieldExplorer = async () => {
     /* ──── Render: Raw JSON ──── */
 
     /**
-     * Renders raw JSON view of filtered record data
+     * Renders raw JSON view of filtered record data, narrowed by the search term. The Copy button
+     * and the exports stay unfiltered.
      */
     function renderRawJson() {
 
@@ -1802,7 +1830,220 @@ const runFieldExplorer = async () => {
             oRawJsonContainer.appendChild(oPre);
         }
 
-        oPre.textContent = JSON.stringify(buildExportObject(), null, 2);
+        const sSearch = getSearchTerm();
+        const oExport = buildExportObject();
+        const oShown = sSearch ? deepFilterObject(oExport, sSearch.toUpperCase()) : oExport;
+
+        oPre.textContent = JSON.stringify(oShown, null, 2);
+    }
+
+    /* ──── Render: Compare ──── */
+
+    /**
+     * Formats a compare identity line.
+     * @param {string} pTitle - 'Pinned' or 'Current'
+     * @param {string} pAccount - account
+     * @param {string} pType - record type
+     * @param {string} pId - record id, '' in create mode
+     * @returns {HTMLDivElement}
+     */
+    function createCompareIdentity(pTitle, pAccount, pType, pId) {
+
+        const oLine = document.createElement('div');
+        const oTitle = document.createElement('span');
+        const oValue = document.createElement('span');
+
+        oLine.className = 'cmp-identity';
+        oTitle.className = 'info-label';
+        oTitle.textContent = `${pTitle}:`;
+        oValue.className = 'info-value';
+        oValue.textContent = `${pAccount} / ${pType} / ${pId || '(new)'}`;
+        oLine.appendChild(oTitle);
+        oLine.appendChild(oValue);
+
+        return oLine;
+    }
+
+    /**
+     * Builds one compare table.
+     * @param {Array<Object>} pRows - rows kept by the filter
+     * @param {Object} pLabels - field id to label
+     * @param {boolean} pWithLines - add the line number column
+     * @param {string} pSearch - lowercase search term
+     * @returns {HTMLTableElement}
+     */
+    function createCompareTable(pRows, pLabels, pWithLines, pSearch) {
+
+        const oTable = document.createElement('table');
+        const oHead = document.createElement('thead');
+        const oHeadRow = document.createElement('tr');
+        const oTbody = document.createElement('tbody');
+
+        oTable.className = 'cmp-table';
+
+        [...(pWithLines ? ['Line'] : []), 'Field', 'Pinned', 'Current'].forEach((pTitle) => {
+
+            const oTh = document.createElement('th');
+
+            oTh.textContent = pTitle;
+
+            if (pTitle === 'Line') oTh.className = 'cmp-col-line';
+
+            oHeadRow.appendChild(oTh);
+        });
+
+        oHead.appendChild(oHeadRow);
+        oTable.appendChild(oHead);
+
+        pRows.slice(0, nSublistRenderCap).forEach((pRow) => {
+
+            const oRow = document.createElement('tr');
+
+            oRow.className = `cmp-${pRow.sKind}`;
+
+            if (pWithLines) {
+
+                const oLineTd = document.createElement('td');
+
+                oLineTd.className = 'line-num';
+                oLineTd.textContent = pRow.nLine;
+                oRow.appendChild(oLineTd);
+            }
+
+            const oFieldTd = document.createElement('td');
+
+            oFieldTd.className = 'cmp-field';
+            oFieldTd.appendChild(highlightSearch(pRow.sCol, pSearch));
+
+            if (pLabels[pRow.sCol]) oFieldTd.appendChild(createLabelLine(pLabels[pRow.sCol], false, pSearch));
+
+            oRow.appendChild(oFieldTd);
+
+            [pRow.sPinned, pRow.sCurrent].forEach((pValue) => {
+
+                const oTd = document.createElement('td');
+
+                oTd.appendChild(highlightSearch(pValue, pSearch));
+                oRow.appendChild(oTd);
+            });
+
+            oTbody.appendChild(oRow);
+        });
+
+        if (pRows.length > nSublistRenderCap) {
+
+            oTbody.appendChild(createEmptyRow(pWithLines ? 4 : 3,
+                `Showing first ${nSublistRenderCap} of ${pRows.length} rows - use search to narrow.`));
+        }
+
+        oTable.appendChild(oTbody);
+
+        return oTable;
+    }
+
+    /**
+     * Renders the Compare tab: both identities, then the differences that survive the current
+     * filter and search.
+     */
+    function renderCompare() {
+
+        if (!oCompareHeader || !oCompareBody || !oRecord || !oPinned || !oCompareDiff) return;
+
+        const sSearch = getSearchTerm();
+        const sFilter = getFieldFilter();
+        const oIdentities = document.createElement('div');
+        const oUnpinBtn = document.createElement('button');
+
+        oIdentities.className = 'cmp-identities';
+        oIdentities.appendChild(createCompareIdentity('Pinned', oPinned.sAccount, oPinned.sRecordType, oPinned.sId));
+        oIdentities.appendChild(createCompareIdentity('Current', sCurrentAccount, oRecord.sRecordType, oRecord.sId));
+
+        oUnpinBtn.id = 'unpinBtn';
+        oUnpinBtn.type = 'button';
+        oUnpinBtn.className = 'fe-mini-btn';
+        oUnpinBtn.textContent = 'Unpin';
+        oUnpinBtn.addEventListener('click', async () => {
+
+            try {
+                await oSessionStore.remove(FEX_PINNED_KEY);
+            } catch (pErr) {
+
+                console.warn('[FEX] unpin', pErr);
+                showPinStatus('Could not unpin this record', true);
+                return;
+            }
+
+            oPinned = null;
+            oCompareDiff = null;
+            showPinStatus('', false);
+            updateCompareTab();
+
+            /* The button that had focus just left the document with its panel */
+            oTabBtnBody?.focus();
+        });
+
+        oCompareHeader.textContent = '';
+        oCompareHeader.appendChild(oIdentities);
+        oCompareHeader.appendChild(oUnpinBtn);
+
+        if (oPinned.sRecordType !== oRecord.sRecordType) {
+
+            const oNotice = document.createElement('div');
+
+            oNotice.className = 'cmp-notice';
+            oNotice.textContent = `Record types differ: ${oPinned.sRecordType} and ${oRecord.sRecordType}.`;
+            oCompareHeader.appendChild(oNotice);
+        }
+
+        oCompareBody.textContent = '';
+
+        if (oCompareDiff.nTotal === 0) {
+
+            const oMsg = document.createElement('div');
+
+            oMsg.className = 'empty-msg';
+            oMsg.textContent = 'No differences.';
+            oCompareBody.appendChild(oMsg);
+            return;
+        }
+
+        const oFrag = document.createDocumentFragment();
+        const aBodyRows = filterDiffRows(oCompareDiff.aBody, oCompareDiff.oBodyLabels, sSearch, sFilter);
+
+        if (aBodyRows.length > 0) {
+
+            const oTitle = document.createElement('div');
+
+            oTitle.className = 'cmp-section-title';
+            oTitle.textContent = 'Body Fields';
+            oFrag.appendChild(oTitle);
+            oFrag.appendChild(createCompareTable(aBodyRows, oCompareDiff.oBodyLabels, false, sSearch));
+        }
+
+        oCompareDiff.aSublists.forEach((pSublist) => {
+
+            const aRows = filterDiffRows(pSublist.aRows, pSublist.oLabels, sSearch, sFilter);
+
+            if (aRows.length === 0) return;
+
+            const oTitle = document.createElement('div');
+
+            oTitle.className = 'cmp-section-title';
+            oTitle.textContent = `Sublist: ${pSublist.sName}`;
+            oFrag.appendChild(oTitle);
+            oFrag.appendChild(createCompareTable(aRows, pSublist.oLabels, true, sSearch));
+        });
+
+        if (!oFrag.hasChildNodes()) {
+
+            const oMsg = document.createElement('div');
+
+            oMsg.className = 'empty-msg';
+            oMsg.textContent = 'No differences match the current search or filter.';
+            oFrag.appendChild(oMsg);
+        }
+
+        oCompareBody.appendChild(oFrag);
     }
 
     /* ──── Render: Legacy Mode (JSONFormatter) ──── */
@@ -1814,7 +2055,7 @@ const runFieldExplorer = async () => {
 
         if (!oLegacyTree || !oRecord) return;
 
-        const sSearch = (oSearchBox?.value || '').toLowerCase();
+        const sSearch = getSearchTerm();
 
         const oLegacyData = {
             recordType: oRecord.sRecordType,
@@ -1825,12 +2066,11 @@ const runFieldExplorer = async () => {
 
         /* Apply search filter if searching */
         const [oDisplayData, nExpandLevels] = sSearch
-            ? [filterLegacyRecord(oLegacyData, sSearch), Infinity]
+            ? [deepFilterObject(oLegacyData, sSearch.toUpperCase()), Infinity]
             : [oLegacyData, 2];
 
-        const oFormatter = new JSONFormatter(oDisplayData, nExpandLevels, {
-            theme: 'dark'
-        });
+        const oFormatter = new JSONFormatter(oDisplayData, nExpandLevels,
+            oRoot.classList.contains('theme-dark') ? { theme: 'dark' } : {});
 
         oLegacyTree.textContent = '';
         oLegacyTree.appendChild(oFormatter.render());
@@ -1865,54 +2105,6 @@ const runFieldExplorer = async () => {
         });
     }
 
-    /**
-     * Deep filter for legacy record object — matches old extension behavior
-     * Recursively filters object properties by search term
-     * @param {Object} pObject - record object to filter
-     * @param {string} pSearchTerm - search term
-     * @returns {Object} filtered object
-     */
-    function filterLegacyRecord(pObject, pSearchTerm) {
-
-        return deepFilterObject(pObject, pSearchTerm.toUpperCase());
-    }
-
-    /**
-     * Recursively filters object properties by uppercase search term
-     * @param {*} pObj - object to filter
-     * @param {string} pSearchUpper - uppercase search term
-     * @returns {*} filtered object or array
-     */
-    function deepFilterObject(pObj, pSearchUpper) {
-
-        if (typeof pObj !== 'object' || pObj === null) return pObj;
-
-        const oResult = Array.isArray(pObj) ? [] : {};
-
-        Object.entries(pObj).forEach(([pKey, pValue]) => {
-
-            if (typeof pValue !== 'object' || pValue === null) {
-
-                const sKeyStr = String(pKey).toUpperCase();
-                const sValStr = String(pValue ?? '').toUpperCase();
-
-                if (sKeyStr.includes(pSearchUpper) || sValStr.includes(pSearchUpper)) {
-                    oResult[pKey] = pValue;
-                }
-
-            } else {
-
-                const oFiltered = deepFilterObject(pValue, pSearchUpper);
-
-                if (Object.keys(oFiltered).length > 0) {
-                    oResult[pKey] = oFiltered;
-                }
-            }
-        });
-
-        return oResult;
-    }
-
     /* ──── Render: Links ──── */
 
     /**
@@ -1922,43 +2114,20 @@ const runFieldExplorer = async () => {
 
         if (!oRecord) return;
 
-        const RECORDS_BROWSER_URL = 'https://system.netsuite.com/help/helpcenter/en_US/srbrowser/Browser2025_2/script/record';
-        const RECORDS_CATALOG_URL = 'https://system.netsuite.com/app/recordscatalog/rcbrowser.nl?whence=#/record_ss';
-
-        const sEncodedType = encodeURIComponent(oRecord.sRecordType);
+        const oLinks = buildDocLinks(oTabUrl.origin, oRecord.sRecordType);
 
         if (oRecordsBrowserLink) {
-            oRecordsBrowserLink.href = `${RECORDS_BROWSER_URL}/${sEncodedType}.html`;
-            oRecordsBrowserLink.style.display = 'inline';
+            oRecordsBrowserLink.href = oLinks.sBrowser || '#';
+            oRecordsBrowserLink.style.display = oLinks.sBrowser ? 'inline' : 'none';
         }
 
         if (oRecordsCatalogLink) {
-            oRecordsCatalogLink.href = `${RECORDS_CATALOG_URL}/${sEncodedType}`;
+            oRecordsCatalogLink.href = oLinks.sCatalog;
             oRecordsCatalogLink.style.display = 'inline';
         }
     }
 
     /* ──── Display Helpers ──── */
-
-    /**
-     * Formats field value for display (handles objects with _text/_value)
-     * @param {*} pValue - field value
-     * @returns {string} formatted display string
-     */
-    function formatDisplayValue(pValue) {
-
-        if (pValue === null || pValue === undefined) return '';
-
-        if (typeof pValue === 'object') {
-
-            if (pValue._text) return `${pValue._text} [${pValue._value || ''}]`;
-            if (pValue.__text) return `${pValue.__text} [${pValue._value || ''}]`;
-
-            return JSON.stringify(pValue);
-        }
-
-        return String(pValue);
-    }
 
     /**
      * Creates a DocumentFragment with search term matches wrapped in highlight elements.
@@ -1974,7 +2143,8 @@ const runFieldExplorer = async () => {
 
         if (!pText) return oFrag;
 
-        if (!pSearch) {
+        /* The includes check saves building a regex per cell on large sublists */
+        if (!pSearch || !pText.toLowerCase().includes(pSearch)) {
             oFrag.appendChild(document.createTextNode(pText));
             return oFrag;
         }

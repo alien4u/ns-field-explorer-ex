@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsResponse>
+<record recordType="customrecord_synth_type" id="55" perm="4" fields="name,custrecord_synth_value">
+<name>Synthetic custom record</name>
+<custrecord_synth_value>42</custrecord_synth_value>
+</record>
+</nsResponse>

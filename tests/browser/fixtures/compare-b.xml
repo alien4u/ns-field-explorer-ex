@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsResponse>
+<record recordType="salesorder" id="3002" perm="4" fields="memo,custbody_keep,addedfield">
+<memo>New memo</memo>
+<custbody_keep>same</custbody_keep>
+<addedfield>brand new</addedfield>
+<nsapiCT>222</nsapiCT>
+<wfFC>T</wfFC>
+<_csrf>SYNTHETIC-CSRF-B</_csrf>
+<machine name="item" type="edit" fields="item,quantity,custcol_tag,nsapiLC">
+<line><item>77</item><quantity>2</quantity><custcol_tag>green</custcol_tag><nsapiLC>b</nsapiLC></line>
+<line><item>78</item><quantity>5</quantity><custcol_tag>blue</custcol_tag></line>
+<line><item>79</item><quantity>9</quantity><custcol_tag>yellow</custcol_tag><nsapiLC></nsapiLC></line>
+</machine>
+<machine name="expense" type="edit" fields="account,custcol_exp"/>
+</record>
+</nsResponse>

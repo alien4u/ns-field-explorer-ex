@@ -64,6 +64,12 @@
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
     </symbol>
+    <symbol id="ico-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="17" x2="12" y2="22"/>
+        <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2
+                 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/>
+    </symbol>
     <symbol id="ico-code" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="16 18 22 12 16 6"/>
@@ -88,6 +94,9 @@
             </button>
             <button id="exportCsvBtn" class="fe-icon-btn" title="Export as CSV">
                 <svg class="fe-icon"><use href="#ico-table"/></svg>
+            </button>
+            <button id="pinBtn" class="fe-icon-btn" title="Pin this record to compare" style="display:none;">
+                <svg class="fe-icon"><use href="#ico-pin"/></svg>
             </button>
             <button id="navManagerBtn" class="fe-icon-btn" title="Nav Manager">
                 <svg class="fe-icon"><use href="#ico-folder"/></svg>
@@ -114,16 +123,21 @@
                 <option value="standard">Standard</option>
             </select>
         </span>
+        <label class="fe-filter-group fe-filter-check" title="Show fields that have no value">
+            <input type="checkbox" id="showEmptyToggle" />
+            <span class="fe-filter-label">Empty</span>
+        </label>
         <span id="recordInfo" class="fe-record-info"></span>
     </div>
     <div class="fe-info-row">
+        <span id="pinStatus" class="fe-pin-status" role="status"></span>
         <span id="fieldCount" class="fe-field-count"></span>
     </div>
 </div>
 
 <!-- Search -->
 <div id="searchWrap" class="fe-search-wrap">
-    <input type="text" id="searchBox" placeholder="Search fields by name or value..." autocomplete="off" />
+    <input type="text" id="searchBox" placeholder="Search fields by ID, label or value..." autocomplete="off" />
 </div>
 
 <!-- Tabs (New Mode) -->
@@ -134,6 +148,8 @@
             aria-controls="panelSublists" tabindex="-1" data-tab="panelSublists">Sublists</button>
     <button class="tab-btn" id="tabBtnRaw" role="tab" aria-selected="false"
             aria-controls="panelRaw" tabindex="-1" data-tab="panelRaw">Raw JSON</button>
+    <button class="tab-btn" id="tabBtnCompare" role="tab" aria-selected="false" style="display:none;"
+            aria-controls="panelCompare" tabindex="-1" data-tab="panelCompare">Compare</button>
 </nav>
 
 <!-- Tab Panels (New Mode) -->
@@ -189,6 +205,12 @@
             </div>
             <pre class="raw-json">Loading...</pre>
         </div>
+    </div>
+
+    <!-- Compare -->
+    <div id="panelCompare" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnCompare">
+        <div id="compareHeader" class="cmp-header"></div>
+        <div id="compareBody" class="table-wrap"></div>
     </div>
 
 </div>
@@ -276,21 +298,13 @@
         </a>
     </div>
     <div class="fe-footer-row">
-        <span class="fe-footer-text">Field Explorer EX v1.2.0</span>
+        <span id="footerVersion" class="fe-footer-text">Field Explorer EX</span>
         <span class="fe-footer-sep"></span>
-        <span class="fe-footer-brand">
+        <a id="footerBrandLink" class="fe-footer-brand" href="https://www.alientechnologyllc.com"
+           target="_blank" rel="noopener noreferrer">
             <img src="img/alien-tech.svg" alt="" class="fe-footer-logo">
             <span>by Alien Technology LLC</span>
-        </span>
-    </div>
-    <div class="fe-footer-row fe-footer-sponsor">
-        <span>Sponsored by</span>
-        <a href="https://suitemigration.com/netsuite-extension-alien/?utm_source=alien_technology&utm_medium=banner&utm_campaign=alien_extensions&utm_content=ns-field-explorer-ex" target="_blank" rel="noopener noreferrer">
-            <img src="img/spon-logo.png" alt="SuiteMigration" class="fe-sponsor-img">
         </a>
-    </div>
-    <div class="fe-footer-row fe-sponsor-text">
-        Migrate your finance data to NetSuite without the Migraine using&nbsp;<a href="https://suitemigration.com/netsuite-extension-alien/?utm_source=alien_technology&utm_medium=banner&utm_campaign=alien_extensions&utm_content=ns-field-explorer-ex" target="_blank" rel="noopener noreferrer">suitemigration.com</a>.
     </div>
 </footer>
 
@@ -305,6 +319,7 @@
 
 <script src="js/shared.js"></script>
 <script src="lib/json-formatter-js/json-formatter-js.js"></script>
+<script src="js/core.js"></script>
 <script src="js/popup.js"></script>
 <script src="js/navmanager.js"></script>
 

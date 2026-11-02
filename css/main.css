@@ -181,8 +181,9 @@ a:hover {
 
 .fe-filter-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 2px 10px;
 }
 
 .fe-filter-group {
@@ -195,6 +196,16 @@ a:hover {
     font-size: 11px;
     font-weight: 600;
     color: var(--fe-text-muted);
+}
+
+.fe-filter-check {
+    cursor: pointer;
+}
+
+.fe-filter-check input {
+    margin: 0;
+    accent-color: var(--fe-primary);
+    cursor: pointer;
 }
 
 .fe-select {
@@ -232,6 +243,16 @@ a:hover {
 .fe-field-count {
     font-size: 11px;
     color: var(--fe-text-muted);
+}
+
+.fe-pin-status {
+    margin-right: auto;
+    font-size: 11px;
+    color: var(--fe-text-muted);
+}
+
+.fe-pin-status.error {
+    color: var(--fe-error);
 }
 
 .info-label {
@@ -349,6 +370,10 @@ a:hover {
     min-height: 0;
     overflow-y: auto;
     padding: 12px;
+    background: var(--fe-bg-card);
+}
+
+:root.theme-dark #legacyContainer {
     background: #000;
 }
 
@@ -496,6 +521,28 @@ tbody td {
     background: var(--fe-bg-section);
     color: var(--fe-text-muted);
     font-family: var(--fe-mono);
+}
+
+.fe-field-label {
+    display: block;
+    padding: 0 3px;
+    font-family: var(--fe-font);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: normal;
+    color: var(--fe-text-muted);
+}
+
+.fe-mandatory {
+    margin-left: 2px;
+    color: var(--fe-error);
+}
+
+.fe-empty-value {
+    font-style: italic;
+    color: var(--fe-text-muted);
 }
 
 /* ===============================================
@@ -672,6 +719,79 @@ mark {
 }
 
 /* ===============================================
+ * Compare
+ * =============================================== */
+.cmp-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 10px;
+    padding: 6px 12px;
+    background: var(--fe-bg-card);
+    border-bottom: 1px solid var(--fe-border-light);
+    flex-shrink: 0;
+}
+
+.cmp-identities {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--fe-text-muted);
+}
+
+.cmp-identity {
+    overflow-wrap: anywhere;
+}
+
+.cmp-notice {
+    flex-basis: 100%;
+    font-size: 11px;
+    color: var(--fe-error);
+}
+
+.cmp-section-title {
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--fe-text-muted);
+    background: var(--fe-bg-section);
+    border-bottom: 1px solid var(--fe-border);
+}
+
+.cmp-table {
+    table-layout: fixed;
+}
+
+.cmp-table thead th {
+    position: static;
+    cursor: default;
+}
+
+.cmp-table td {
+    overflow-wrap: anywhere;
+}
+
+.cmp-col-line {
+    width: 44px;
+}
+
+.cmp-field .fe-field-label {
+    padding: 0;
+}
+
+.cmp-added td:first-child {
+    box-shadow: inset 3px 0 0 #2e7d32;
+}
+
+.cmp-removed td:first-child {
+    box-shadow: inset 3px 0 0 #c62828;
+}
+
+.cmp-changed td:first-child {
+    box-shadow: inset 3px 0 0 #f9a825;
+}
+
+/* ===============================================
  * Messages
  * =============================================== */
 .loading-msg,
@@ -745,35 +865,16 @@ mark {
     color: var(--fe-text-muted);
 }
 
+/* Brand link keeps the footer look: muted color, underline only on hover */
+a.fe-footer-brand:hover {
+    color: var(--fe-text-muted);
+    text-decoration: underline;
+}
+
 .fe-footer-logo {
     width: 12px;
     height: 12px;
     border-radius: 2px;
-}
-
-.fe-footer-sponsor {
-    gap: 5px;
-    font-size: 11px;
-    color: var(--fe-text-muted);
-    margin-top: 2px;
-}
-
-.fe-sponsor-img {
-    height: 16px;
-    vertical-align: middle;
-}
-
-/* Padded clear of the resize grip parked in the bottom-left corner */
-.fe-sponsor-text {
-    text-align: center;
-    font-size: 10px;
-    color: var(--fe-text-muted);
-    padding: 0 22px;
-}
-
-.fe-sponsor-text a {
-    color: var(--fe-text-muted);
-    text-decoration: underline;
 }
 
 /* ===============================================
@@ -1253,6 +1354,13 @@ mark {
     padding: 1px 5px;
     border-radius: 3px;
     flex-shrink: 0;
+}
+
+.nav-tree-toggle:focus-visible,
+.nav-section-header:focus-visible,
+.nav-orphans-header:focus-visible {
+    outline: 2px solid var(--fe-primary);
+    outline-offset: -1px;
 }
 
 /* -- Nav Tree: Global Override Indicator -- */

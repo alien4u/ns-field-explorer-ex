@@ -282,25 +282,24 @@ const initNavManager = async () => {
     const oExpandedKeys = new Set();
 
     /**
-     * Collects every item key present in the scraped menu snapshot.
+     * Makes a click-to-toggle element a keyboard-operable button.
      *
-     * @param {Array<Object>} pItems - menu tree
-     * @param {Set<string>} [pKeys] - accumulator
-     * @returns {Set<string>} keys present in the snapshot
+     * @param {HTMLElement} pElement - element whose click handler does the toggling
+     * @param {boolean} pExpanded - initial aria-expanded state
      */
-    const collectTreeKeys = (pItems, pKeys) => {
+    const bindToggleKeys = (pElement, pExpanded) => {
 
-        const oKeys = pKeys || new Set();
+        pElement.setAttribute('role', 'button');
+        pElement.tabIndex = 0;
+        pElement.setAttribute('aria-expanded', String(pExpanded));
 
-        pItems.forEach((pItem) => {
+        pElement.addEventListener('keydown', (pEvent) => {
 
-            const sKey = pItem.id || pItem.label || '';
+            if (pEvent.key !== 'Enter' && pEvent.key !== ' ') return;
 
-            if (sKey) oKeys.add(sKey);
-            if (pItem.children?.length) collectTreeKeys(pItem.children, oKeys);
+            pEvent.preventDefault();
+            pElement.click();
         });
-
-        return oKeys;
     };
 
     /**
@@ -367,15 +366,15 @@ const initNavManager = async () => {
      * @param {HTMLElement} pContainer - scope container
      * @param {Map} pHiddenMap - hidden items map for this scope
      * @param {string} pScope - 'all' or account ID
-     * @param {Set<string>} pTreeKeys - keys present in the snapshot
+     * @param {{oIds: Set, oLabels: Set}} pTreeIndex - ids and labels present in the snapshot
      */
-    const appendOrphanSection = (pContainer, pHiddenMap, pScope, pTreeKeys) => {
+    const appendOrphanSection = (pContainer, pHiddenMap, pScope, pTreeIndex) => {
 
         const aOrphans = [];
 
         pHiddenMap.forEach((pValue, pKey) => {
 
-            if (!pTreeKeys.has(pKey)) aOrphans.push({ key: pKey, label: pValue.label });
+            if (!isNavRuleInTree(pKey, pValue, pTreeIndex)) aOrphans.push({ key: pKey, label: pValue.label });
         });
 
         if (aOrphans.length === 0) return;
@@ -395,7 +394,13 @@ const initNavManager = async () => {
         oTitle.textContent = `Not in current menu (${aOrphans.length})`;
         oHeader.appendChild(oToggle);
         oHeader.appendChild(oTitle);
-        oHeader.addEventListener('click', () => oSection.classList.toggle('collapsed'));
+        bindToggleKeys(oHeader, false);
+        oHeader.addEventListener('click', () => {
+
+            const bCollapsed = oSection.classList.toggle('collapsed');
+
+            oHeader.setAttribute('aria-expanded', String(!bCollapsed));
+        });
 
         oNote.className = 'nav-orphans-note';
         oNote.textContent = 'Hidden by a rule but absent from the menu scanned on this page.';
@@ -477,10 +482,10 @@ const initNavManager = async () => {
 
         } else {
 
-            pContainer.appendChild(buildTreeUl(aItems, pHiddenMap, pScope, pSearchTerm, 0, pGlobalMap, ''));
+            pContainer.appendChild(buildTreeUl(aItems, pHiddenMap, pScope, pSearchTerm, 0, pGlobalMap, '', false));
         }
 
-        appendOrphanSection(pContainer, pHiddenMap, pScope, collectTreeKeys(aItems));
+        appendOrphanSection(pContainer, pHiddenMap, pScope, collectNavTreeIndex(aItems));
 
         if (!sFocusPath) return;
 
@@ -499,9 +504,10 @@ const initNavManager = async () => {
      * @param {number} pDepth - nesting depth
      * @param {Map|null} pGlobalMap - global hidden map (null = this IS the global tree)
      * @param {string} pParentPath - render path of the parent item, '' at the root
+     * @param {boolean} pKeepAll - an ancestor matched by its own label or id, so nothing below it is filtered
      * @returns {HTMLUListElement}
      */
-    const buildTreeUl = (pItems, pHiddenMap, pScope, pSearchTerm, pDepth, pGlobalMap, pParentPath) => {
+    const buildTreeUl = (pItems, pHiddenMap, pScope, pSearchTerm, pDepth, pGlobalMap, pParentPath, pKeepAll) => {
 
         const oUl = document.createElement('ul');
         oUl.className = 'nav-tree';
@@ -518,14 +524,17 @@ const initNavManager = async () => {
              * the search filter, so a path means the same item in a filtered render. */
             const sItemPath = pParentPath ? `${pParentPath}.${pIndex}` : String(pIndex);
 
+            /* Expand/collapse toggle for items with children */
+            const bHasChildren = pItem.children && pItem.children.length > 0;
+            const bOwnMatch = !!pSearchTerm && navItemMatchesOwn(pItem, pSearchTerm);
+            const bForcedOpen = !!pSearchTerm && bHasChildren
+                && pItem.children.some((pChild) => navItemHasMatch(pChild, pSearchTerm));
+
             /* Filter by search term */
-            if (pSearchTerm && !matchesSearch(pItem, pSearchTerm)) return;
+            if (pSearchTerm && !pKeepAll && !bOwnMatch && !bForcedOpen) return;
 
             const oLi = document.createElement('li');
             oLi.className = 'nav-tree-item';
-
-            /* Expand/collapse toggle for items with children */
-            const bHasChildren = pItem.children && pItem.children.length > 0;
 
             const oRow = document.createElement('div');
             oRow.className = 'nav-tree-row';
@@ -536,25 +545,32 @@ const initNavManager = async () => {
             if (bHasChildren) {
 
                 const oToggle = document.createElement('span');
-                const bExpanded = oExpandedKeys.has(sItemKey);
+                const bExpanded = bForcedOpen || oExpandedKeys.has(sItemKey);
 
                 oToggle.className = 'nav-tree-toggle';
                 oToggle.textContent = bExpanded ? '▼' : '▶';
+                oToggle.setAttribute('aria-label', `Toggle ${pItem.label || pItem.id}`);
+                bindToggleKeys(oToggle, bExpanded);
 
                 if (bExpanded) oLi.classList.add('expanded');
 
                 oToggle.addEventListener('click', () => {
 
-                    const bNowExpanded = !oExpandedKeys.has(sItemKey);
+                    const bNowExpanded = !oLi.classList.contains('expanded');
 
-                    if (bNowExpanded) {
-                        oExpandedKeys.add(sItemKey);
-                    } else {
-                        oExpandedKeys.delete(sItemKey);
+                    /* A branch the search opened is not one the user opened */
+                    if (!bForcedOpen) {
+
+                        if (bNowExpanded) {
+                            oExpandedKeys.add(sItemKey);
+                        } else {
+                            oExpandedKeys.delete(sItemKey);
+                        }
                     }
 
                     oLi.classList.toggle('expanded', bNowExpanded);
                     oToggle.textContent = bNowExpanded ? '▼' : '▶';
+                    oToggle.setAttribute('aria-expanded', String(bNowExpanded));
                 });
 
                 oRow.appendChild(oToggle);
@@ -567,7 +583,7 @@ const initNavManager = async () => {
             }
 
             /* Check if this item is globally hidden (only relevant for account tree) */
-            const bGloballyHidden = pGlobalMap ? pGlobalMap.has(sItemKey) : false;
+            const bGloballyHidden = pGlobalMap ? !!resolveNavRuleKey(pGlobalMap, pItem) : false;
 
             const oCb = document.createElement('input');
             oCb.type = 'checkbox';
@@ -581,7 +597,7 @@ const initNavManager = async () => {
                 oCb.title = 'Hidden globally (All Instances)';
                 oRow.classList.add('nav-tree-row-global');
             } else {
-                oCb.checked = sItemKey ? pHiddenMap.has(sItemKey) : false;
+                oCb.checked = !!resolveNavRuleKey(pHiddenMap, pItem);
                 oCb.disabled = !sItemKey;
             }
 
@@ -604,7 +620,7 @@ const initNavManager = async () => {
                     if (bChecked) {
                         pHiddenMap.set(sItemKey, { id: pItem.id, label: pItem.label });
                     } else {
-                        pHiddenMap.delete(sItemKey);
+                        removeRulesFor(pHiddenMap, pItem);
                     }
                 });
 
@@ -612,7 +628,7 @@ const initNavManager = async () => {
 
                 /* Checking in All Instances also drops any duplicate account rule */
                 if (!pGlobalMap) {
-                    await cleanupAccountDuplicates(sItemKey, bChecked);
+                    await cleanupAccountDuplicates(pItem, bChecked);
                 }
 
                 /* Re-render on success as well. An earlier task's rollback may have
@@ -664,8 +680,8 @@ const initNavManager = async () => {
             /* Render children */
             if (bHasChildren) {
 
-                const oChildUl = buildTreeUl(pItem.children, pHiddenMap, pScope, pSearchTerm, pDepth + 1, pGlobalMap, sItemPath);
-                oLi.appendChild(oChildUl);
+                oLi.appendChild(buildTreeUl(pItem.children, pHiddenMap, pScope, pSearchTerm, pDepth + 1, pGlobalMap,
+                    sItemPath, pKeepAll || bOwnMatch));
             }
 
             oUl.appendChild(oLi);
@@ -675,17 +691,34 @@ const initNavManager = async () => {
     };
 
     /**
+     * Removes every rule that applies to an item. An old id-keyed rule and a newer label-keyed
+     * one can both point at it, and removing only one would leave the item hidden and checked.
+     *
+     * @param {Map} pMap - hidden items map
+     * @param {Object} pItem - menu item
+     */
+    const removeRulesFor = (pMap, pItem) => {
+
+        let sKey = resolveNavRuleKey(pMap, pItem);
+
+        while (sKey) {
+            pMap.delete(sKey);
+            sKey = resolveNavRuleKey(pMap, pItem);
+        }
+    };
+
+    /**
      * Removes an item from account storage if it was just added to All Instances.
      * Prevents redundant storage.
      *
-     * @param {string} pKey - item key
+     * @param {Object} pItem - menu item
      * @param {boolean} pAdded - true if added to global, false if removed
      */
-    const cleanupAccountDuplicates = async (pKey, pAdded) => {
+    const cleanupAccountDuplicates = async (pItem, pAdded) => {
 
-        if (!pAdded || !sAccountId || !oHiddenAccount.has(pKey)) return;
+        if (!pAdded || !sAccountId || !resolveNavRuleKey(oHiddenAccount, pItem)) return;
 
-        await commitHiddenIds(oHiddenAccount, sAccountId, () => oHiddenAccount.delete(pKey));
+        await commitHiddenIds(oHiddenAccount, sAccountId, () => removeRulesFor(oHiddenAccount, pItem));
     };
 
     /**
@@ -727,27 +760,6 @@ const initNavManager = async () => {
 
         renderTree(oNavTreeAll, aMenuTree, oHiddenAll, 'all', sTerm, null);
         renderAccountTree();
-    };
-
-    /**
-     * Checks if a menu item or any of its children match the search term.
-     *
-     * @param {Object} pItem - menu item
-     * @param {string} pTerm - lowercase search term
-     * @returns {boolean}
-     */
-    const matchesSearch = (pItem, pTerm) => {
-
-        const sLabel = (pItem.label || '').toLowerCase();
-        const sId = (pItem.id || '').toLowerCase();
-
-        if (sLabel.includes(pTerm) || sId.includes(pTerm)) return true;
-
-        if (pItem.children) {
-            return pItem.children.some((pChild) => matchesSearch(pChild, pTerm));
-        }
-
-        return false;
     };
 
     /**
@@ -1002,6 +1014,8 @@ const initNavManager = async () => {
     /* Section collapse/expand toggles */
     document.querySelectorAll('.nav-section-header').forEach((pHeader) => {
 
+        bindToggleKeys(pHeader, true);
+
         pHeader.addEventListener('click', (pEvent) => {
 
             /* Don't toggle when clicking inside the tree content */
@@ -1010,7 +1024,10 @@ const initNavManager = async () => {
             const oSection = pHeader.closest('.nav-section');
 
             if (oSection) {
-                oSection.classList.toggle('collapsed');
+
+                const bCollapsed = oSection.classList.toggle('collapsed');
+
+                pHeader.setAttribute('aria-expanded', String(!bCollapsed));
             }
         });
     });

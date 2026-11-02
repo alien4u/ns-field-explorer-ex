@@ -1,0 +1,31 @@
+{
+    "invoice": {
+        "f": {
+            "memo": ["Reference Memo", "text", 0],
+            "entity": ["Customer", "select", 1],
+            "amountpaid": ["Amount Paid", "currency", 0],
+            "otherrefnum": ["PO/Check Number", "text", 1],
+            "billaddress": ["Bill To", "address", 0],
+            "nldept": ["", "", 1]
+        },
+        "s": {
+            "item": {
+                "item": ["Reference Item", "select"],
+                "amount": ["Amount", "currency"],
+                "custcol_note": ["Reference Note", "textarea"]
+            }
+        }
+    },
+    "salesorder": {
+        "f": {
+            "memo": ["Memo", "text", 0],
+            "trandate": ["Date", "date", 0]
+        },
+        "s": {
+            "item": {
+                "rate": ["Rate", "rate"],
+                "quantity": ["Quantity", "integer"]
+            }
+        }
+    }
+}

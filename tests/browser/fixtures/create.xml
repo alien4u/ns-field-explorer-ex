@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsResponse>
+<record recordType="invoice" perm="4" fields="entity,trandate,memo,nsapiCT">
+<_csrf>SYNTHETIC-CSRF-TOKEN-VALUE</_csrf>
+<trandate>3/15/2026</trandate>
+<nsapiCT>1730000000000</nsapiCT>
+<machine name="item" type="edit" fields="item,quantity,amount"/>
+</record>
+</nsResponse>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsResponse>
+<record recordType="invoice" id="1001" perm="4" fields="entity,trandate,memo,amountpaid,paid,custbody_region,custbody_blank,custbody_blank2,custpage_note,cseg_area,customform,entryformquerystring,otherrefnum,billaddress,department,_csrf,_eml_nkey_,_multibtnstate_,nsapiCT,nsapiFC,nlapiCC,wfFC,wfPI,selectedtab,nsbrowserenv,nldept,item,links,salesteam">
+<_csrf>SYNTHETIC-CSRF-TOKEN-VALUE</_csrf>
+<_eml_nkey_>SYNTHETIC-EML-KEY-VALUE</_eml_nkey_>
+<entity>501</entity>
+<trandate>3/15/2026</trandate>
+<memo>Synthetic memo text</memo>
+<amountpaid>125.50</amountpaid>
+<paid>Partially</paid>
+<custbody_region>North</custbody_region>
+<custpage_note>Added by a beforeLoad script</custpage_note>
+<cseg_area>7</cseg_area>
+<customform>68</customform>
+<entryformquerystring>id=1001&amp;e=T</entryformquerystring>
+<nsapiCT>1730000000000</nsapiCT>
+<nsapiFC>F</nsapiFC>
+<nlapiCC>F</nlapiCC>
+<wfFC>F</wfFC>
+<wfPI>0</wfPI>
+<nldept>3</nldept>
+<machine name="item" type="edit" fields="item,item_display,quantity,amount,description,custcol_note,custcol_blank,price,price_display,_line_hidden,nsapiLC">
+<line><_csrf>SYNTHETIC-CSRF-ON-A-LINE</_csrf><_eml_nkey_>SYNTHETIC-EML-ON-A-LINE</_eml_nkey_><item>77</item><item_display>Widget A</item_display><quantity>2</quantity><amount>10.00</amount><description>First line alpha</description><custcol_note>note-one</custcol_note><price>1</price><price_display>List</price_display></line>
+<line><item>78</item><item_display>Widget B</item_display><quantity>5</quantity><amount>25.00</amount><description>Second line beta</description><custcol_note>note-two</custcol_note><price>1</price><price_display>List</price_display></line>
+<line><item>79</item><item_display>Gadget C</item_display><quantity>1</quantity><amount>99.00</amount><description>Third line gamma</description><custcol_note>note-three</custcol_note><price>2</price><price_display>Custom</price_display></line>
+</machine>
+<machine name="links" type="list" fields="id,linktype,linkdate,custcol_linkflag"/>
+<machine name="salesteam" type="edit" fields="employee,employee_display,contribution">
+<line><employee>9</employee><employee_display>Synthetic Rep</employee_display><contribution>100.0%</contribution></line>
+</machine>
+</record>
+</nsResponse>

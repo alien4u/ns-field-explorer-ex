@@ -7,8 +7,8 @@
  *
  * Storage format (per key):
  *   Array of { key, id, label } objects
- *   - id = data-automation-id (primary selector)
- *   - label = aria-label (used only when no id was captured)
+ *   - id = data-automation-id
+ *   - label = aria-label
  *
  * @module navhider
  */
@@ -20,23 +20,26 @@
     const STYLE_ID = 'fex-navhider-style';
 
     /**
-     * Builds the CSS selector for a hidden item. The automation id is unique per
-     * menu entry; the label is a last resort and matches every entry sharing it.
+     * Builds the CSS selector for a hidden item. A rule carrying both gets both: live menu
+     * anchors no longer have automation ids, so a rule saved by an older build would otherwise
+     * stop matching its item.
      *
      * @param {Object} pItem - { key, id, label }
-     * @returns {string} CSS selector, or empty string when the item has neither
+     * @returns {string} CSS selector list, or empty string when the item has neither
      */
     const buildSelector = (pItem) => {
 
+        const aSelectors = [];
+
         if (pItem.id) {
-            return `[role="menuitem"]:has(> a[data-automation-id="${CSS.escape(pItem.id)}"])`;
+            aSelectors.push(`[role="menuitem"]:has(> a[data-automation-id="${CSS.escape(pItem.id)}"])`);
         }
 
         if (pItem.label) {
-            return `[role="menuitem"]:has(> a[aria-label="${CSS.escape(pItem.label)}"])`;
+            aSelectors.push(`[role="menuitem"]:has(> a[aria-label="${CSS.escape(pItem.label)}"])`);
         }
 
-        return '';
+        return aSelectors.join(',\n');
     };
 
     /**
@@ -102,7 +105,8 @@
             });
 
             injectStyles(aMerged);
-        });
+
+        }).catch((pErr) => console.warn('[FEX] nav rules read', pErr));
     };
 
     applyHiddenMenus();

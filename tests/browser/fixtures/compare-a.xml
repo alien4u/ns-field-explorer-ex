@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsResponse>
+<record recordType="salesorder" id="3001" perm="4" fields="memo,custbody_keep,removedfield,custbody_gone">
+<memo>Old memo</memo>
+<custbody_keep>same</custbody_keep>
+<removedfield>going away</removedfield>
+<custbody_gone>custom going away</custbody_gone>
+<blankpinned></blankpinned>
+<nsapiCT>111</nsapiCT>
+<wfFC>F</wfFC>
+<_csrf>SYNTHETIC-CSRF-A</_csrf>
+<machine name="item" type="edit" fields="item,quantity,custcol_tag,nsapiLC">
+<line><item>77</item><quantity>1</quantity><custcol_tag>red</custcol_tag><nsapiLC>a</nsapiLC></line>
+<line><item>78</item><quantity>5</quantity><custcol_tag>blue</custcol_tag></line>
+</machine>
+<machine name="expense" type="edit" fields="account,custcol_exp">
+<line><account>10</account><custcol_exp>travel</custcol_exp></line>
+</machine>
+<machine name="links" type="list" fields="id"/>
+</record>
+</nsResponse>

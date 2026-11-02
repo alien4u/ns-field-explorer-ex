@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nsResponse>
+<record recordType="salesorder" id="2002" perm="4" fields="entity,trandate,memo,custbody_tier,nsapiCT,_csrf">
+<_csrf>SYNTHETIC-CSRF-TOKEN-VALUE</_csrf>
+<entity>501</entity>
+<trandate>2026-03-15</trandate>
+<memo>Edit mode memo</memo>
+<machine name="item" type="edit" fields="item,item_display,quantity,rate,custcol_tag">
+<line><item>77</item><item_display>Widget A</item_display><quantity>2</quantity><rate>5.00</rate></line>
+</machine>
+</record>
+</nsResponse>
