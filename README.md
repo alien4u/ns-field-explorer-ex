@@ -22,6 +22,8 @@
 | Edge Add-ons | v1.1.1 | [Install](https://microsoftedge.microsoft.com/addons/detail/fanclcoacijckjhfbcocfmcdfkkbnlci) |
 | Firefox Add-ons | v1.1.1 | [Install](https://addons.mozilla.org/en-US/firefox/addon/netsuite-field-explorer-ex/) |
 
+> v1.2.0 is awaiting store approval. The stores still serve v1.1.1.
+
 ## Overview
 
 NetSuite Field Explorer EX is a browser extension for NetSuite administrators, developers, and consultants. It gives you instant visibility into every field on any record: body fields with types, sublists with all columns, raw JSON, and a built-in navigation manager to declutter NetSuite's menu bar.
