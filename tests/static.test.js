@@ -36,6 +36,7 @@ describe('manifests', () => {
         expect(oChrome.background).toEqual({service_worker: 'js/background.js'});
         expect(oFirefox.background).toEqual({scripts: ['js/shared.js', 'js/background.js']});
         expect(oFirefox.browser_specific_settings.gecko.strict_min_version).toBe('140.0');
+        expect(oFirefox.browser_specific_settings.gecko_android.strict_min_version).toBe('142.0');
     });
 });
 

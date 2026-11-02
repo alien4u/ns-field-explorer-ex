@@ -242,7 +242,7 @@ bun tests/browser/run.js        # real popup.html, CSS and JS in headless Chrome
 - Shared module (`js/shared.js`) removes four copies of the browser API shim and two of the registration logic
 - Content-script registration is now verified after every register/update
 - Nav rule storage schema v2 with a one-time migration on update
-- Firefox `strict_min_version` lowered to 140.0 (ESR); `build.sh` enforces manifest version parity and stops shipping unreferenced artwork
+- Firefox `strict_min_version` lowered to 140.0 (ESR), 142.0 on Firefox for Android, the first version there that supports `data_collection_permissions`; `build.sh` enforces manifest version parity and stops shipping unreferenced artwork
 
 ### v1.1.1 - 2026-03-10
 
